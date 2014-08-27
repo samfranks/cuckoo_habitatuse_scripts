@@ -12,11 +12,28 @@
 
 ######## NOTES ON ANALYSIS ########
 
+###--- ANALYSIS 1 - OCCUPANCY MODEL ---###
+
+### DO HABITAT, SIZE OF PROTECTED AREA, LEVEL OF PROTECTED AREA PROTECTION, CLIMATE, AND ELEVATION PREDICT CUCKOO PRESENCE/ABSENCE?
+
+### MODEL STRUCTURE ###
+
+# logistic regression, sampling unit = points, nested random effects of individual(stopover(pointid))
+
+# presence/absence (sampling unit = the stopover MCP) ~
+#     HABITAT (5 land cover categories)
+#     PROTECTED AREA (Y/N)
+#     LEVEL OF PROTECTION (national or international)
+#     ELEVATION
+#     WINTER CLIMATE
+#     SPRING CLIMATE
+#     MIGRATION STRATEGY (E/W)
+
 #### REVISED ANALYSIS 5 AUG 2014 - sampling unit = individual simulated points ####
 # 
 # A. PSEUDOREPLICATION
 #
-# Using points instead of polygons introduces pseudoreplication at various levels:
+# Using points instead of stopover polygons introduces pseudoreplication at various levels:
 #   
 # 1) number of points in a stopover: stopovers with long duration and/or lots of points will introduce spatial bias by oversampling certain areas
 # - control by including mgroup as a nested random effect within individual
@@ -26,33 +43,29 @@
 # - control by including point id as a nested random effect within mgroup
 # 
 #
-# B. WEIGHT OBSERVATIONS IN MODEL ACCORDING TO LOCATION UNCERTAINTY
+# **B. WEIGHT OBSERVATIONS IN MODEL ACCORDING TO LOCATION UNCERTAINTY - Rob Rob thinks this is unnecessary because we've already accounted for the error in the simulation bootstrap - also, you can't do this in R (weights argument is when you need to indicate the number of trials that leads to proportional response data) but apparently you can in SAS
 # - weight = 1/area of the error ellipse of a point
 #
 #
 # C. HABITAT VARIABLES ARE CATEGORICAL
 # - dummy variables created for 5 different habitat categories
-
-###--- ANALYSIS 1 - OCCUPANCY MODEL ---###
-
-### DO HABITAT, SIZE OF PROTECTED AREA, LEVEL OF PROTECTED AREA PROTECTION, CLIMATE, AND ELEVATION PREDICT CUCKOO PRESENCE/ABSENCE?
-
-### MODEL STRUCTURE ###
-
-# logistic regression, with individual as a random effect
-
-# presence/absence (sampling unit = the stopover MCP) ~
-#     HABITAT (proportion of 6 land cover categories)
-#     PROTECTED AREA (Y/N)
-#     (AREA PROTECTED AREA (amount of stopover MCP that is PA, by proportion or absolute area in km2))
-#     LEVEL OF PROTECTION (national or international)
-#     ELEVATION
-#     WINTER RAINFALL (average local rainfall for grid cell Nov-Feb)
-#     WINTER TEMP (average local temp for grid cell Nov-Feb)
-#     SPRING RAINFALL (average local rainfall for grid cell Mar-Jun)
-#     SPRING TEMP (average local temp for grid cell Mar-Jun)
-#     MIGRATION STRATEGY (E/W)
-#     random effect of stopover? or individual? or stopover nested within individual?
+#
+#
+# D. SPEI CLIMATE VARIABLES
+# - 6-month SPEI values are calculated based on the current month's plus 5 previous months data
+# - this timescale should provide a good representation of vegetation growing conditions over time periods likely to be relevant for determining the quality of habitats that cuckoos use
+# - SPEI-month values to use will be March and August
+# - SPEI-Mar represents the conditions over the winter (Oct-Mar period), which is of greatest relevance in the Mediterranean where winter rainfall is most important for vegetation growth
+# - SPEI-Aug represents the conditions over the spring and summer (Mar-Aug period), which is of greater relevance in the more northern parts of Europe where rainfall early in the growing season sets the conditions for vegetation growth
+# - from Vicente-Serrano et al. (2012 PNAS) a 6 month SPEI may be the best trade-off in using a timescale that will be relatively well correlated with vegetation activity (as measured by NDVI and other indices)
+#
+#
+# D. MODEL VARIABLES & CANDIDATE MODEL SET
+# - Response = presence/absence
+# - Protected area (categorical): does point fall in a protected area, Y/N
+# - Winter climate (continuous): SPEI 6-month SPEI in March, which summarizes the relative precipitation/evapotranspiration that has occurred over the last 6 months (Oct-Mar) compared to the norm (standardized against the background 30 year dataset)
+# - spring climate (continuous): sPEI 6-month SPEI in August, which summarizes the relative precipitation/evapotranspiration that has occurred over the last 6 months (Mar-Aug) compared to the norm (standardized against the background 30 year dataset)
+# - elevation
 
 ###--- ANALYSIS 2 - SUCCESS OF SAHARA CROSSING MODEL ---###
 
@@ -71,7 +84,7 @@
 #     SPRING TEMP (average local temp for grid cell Mar-Jun)
 #     MIGRATION STRATEGY (E/W)
 #     random effect of stopover? or individual? or stopover nested within individual?
- 
+
 
 library(plyr)
 library(reshape)
@@ -90,7 +103,9 @@ points <- TRUE
 
 cluster <- FALSE
 
-Mac <- FALSE
+Mac <- TRUE
+
+randomradius <- 200
 
 if (!cluster) {
   
@@ -120,7 +135,7 @@ if (points) {
   
 setwd(paste(datawd, "/data for analysis/", sep=""))
 present <- read.csv("presence data all variables points.csv", header=T)
-absent <- read.csv("absence data all variables points 50 km.csv", header=T)
+absent <- read.csv(paste("absence data all variables points ", randomradius, " km.csv", sep=""), header=T)
 
 present <- rename(present, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
 
@@ -169,7 +184,7 @@ if (points) {
   ### barplot showing all random scales
   par(mar=c(5,5,2,1))
   
-  barplot(as.matrix(corine.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present","random 50 km"), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
+  barplot(as.matrix(corine.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
   
 }
 
@@ -225,7 +240,7 @@ if (!points) {
   ### barplot showing single random scale
   par(mar=c(5,5,2,1))
   
-  barplot(as.matrix(meancorine), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present","random 50 km"), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
+  barplot(as.matrix(meancorine), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
   
   #########################################################
     
@@ -255,7 +270,7 @@ if (points) {
   overlap.summary <- rbind(overlap.present, overlap.absent)
   
   par(mar=c(5,5,2,1))
-  barplot(as.matrix(overlap.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("N", "Y"), cex.names=0.8, xpd=TRUE, legend=c("present","random 50 km"), args.legend=list(bty="n", cex=0.8), xlab="In a protected area?", ylab="proportion of all stopovers \n overlapping protected areas")
+  barplot(as.matrix(overlap.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("N", "Y"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="In a protected area?", ylab="proportion of all stopovers \n overlapping protected areas")
   
 }
 
@@ -268,7 +283,7 @@ if (!points) {
   overlap.summary <- rbind(overlap.present, overlap.absent)
   
   par(mar=c(5,5,2,1))
-  barplot(as.matrix(overlap.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("N", "Y"), cex.names=0.8, xpd=TRUE, legend=c("present","random 50 km"), args.legend=list(bty="n", cex=0.8), xlab="In a protected area?", ylab="proportion of all points \n in protected areas")
+  barplot(as.matrix(overlap.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("N", "Y"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="In a protected area?", ylab="proportion of all points \n in protected areas")
   
   ####==== Proportion by area of stopover that overlaps with PA overlap ====####
   
@@ -313,7 +328,7 @@ if (points) {
   desig.summary <- rbind(desig.P, desig.A)
   
   par(mar=c(5,5,2,1), mfrow=c(1,1))
-  barplot(as.matrix(desig.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("International", "National"), cex.names=0.8, xpd=TRUE, legend=c("present","random 50 km"), args.legend=list(bty="n", cex=0.8), xlab="Protected Area designation level", ylab="proportion of all points \n in protected areas")
+  barplot(as.matrix(desig.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("International", "National"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="Protected Area designation level", ylab="proportion of all points \n in protected areas")
   
   
 }
@@ -363,9 +378,9 @@ if (points) {
   overlap.summary <- rbind(PAhab.present, PAhab.absent)
   
   par(mar=c(5,5,2,1), mfrow=c(1,2))
-  barplot(as.matrix(PAhab.present), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("Outside PA","Inside PA"), args.legend=list(bty="n", cex=0.8), xlab="Land cover class", ylab="proportion of all points")
+  barplot(as.matrix(PAhab.present), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("Present, Outside PA","Present, Inside PA"), args.legend=list(bty="n", cex=0.8), xlab="Land cover class", ylab="proportion of all points")
   
-  barplot(as.matrix(PAhab.absent), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("Outside PA","Inside PA"), args.legend=list(bty="n", cex=0.8), xlab="Land cover class", ylab="proportion of all points")
+  barplot(as.matrix(PAhab.absent), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c(paste("Absent ", randomradius, " km, Outside PA", sep=""), paste("Absent ", randomradius , " km, Inside PA", sep="")), args.legend=list(bty="n", cex=0.8), xlab="Land cover class", ylab="proportion of all points")
   
   
 }
@@ -375,11 +390,11 @@ if (points) {
 #################################################################
 #################################################################
 
-###############################################
+###########################################################################
 #
-####    LOGISTIC REGRESSION ANALYSIS       ####
+####    LOGISTIC REGRESSION MIXED MODEL ANALYSIS & MODEL SELECTION     ####
 #
-###############################################
+###########################################################################
 
 #### NOTES ####
 # Check for co-linearity among continuous explanatory variables using pairplots pairs() (habitat features, climate, elevation), and cor(x, method="spearman") 
@@ -399,6 +414,9 @@ if (points) {
 # absent.data <- subset(absent, random.scale==50, select=-c(nabsence,random.scale))
 newpresent <- rename(present, c("newlongs.epsg3035"="long.epsg3035", "newlats.epsg3035"="lat.epsg3035", "newlongs.epsg4326"="long.epsg4326", "newlats.epsg4326"="lat.epsg4326"))
 newabsent <- rename(absent, c("randomlong.epsg3035"="long.epsg3035", "randomlat.epsg3035"="lat.epsg3035", "randomlong.epsg4326"="long.epsg4326", "randomlat.epsg4326"="lat.epsg4326"))
+
+############# subset out only one round of absences
+#newabsent <- subset(newabsent, nabsence==1)
 newabsent <- newabsent[,-which(names(newabsent) %in% c("nabsence","random.scale"))]
 
 alldata <- rbind(newpresent, newabsent)
@@ -439,128 +457,183 @@ if (!points) {
 #### ---- MODEL DATASET ---- ####
 
 #dat <- with(alldata, data.frame(presence, name, strat=strategy, hab.ag=agriculture, hab.for=forest, hab.scrub=scrub_grassland, hab.un=unsuitable, w.temp=temp.C.winter, w.precip=precip.mm.winter, s.precip=precip.mm.spring, s.temp=temp.C.spring, elevation=elevation.m, PA.cat=overlap, PA.cont=prop.overlap))
-dat <- with(alldata, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, error.major, error.minor, error.weight=1/(pi*error.major*error.minor), rescale.weights=rescale(1/(pi*error.major*error.minor))))
+# dat <- with(alldata, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, error.major, error.minor, error.weight=1/(pi*error.major*error.minor), rescale.weights=rescale(1/(pi*error.major*error.minor))))
 
-error.weight <- with(dat, pi*error.major*error.minor)
-error.weight.small <- error.weight/10000
+fulldat <- with(alldata, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS))
 
-inverse.sqrt.errors <- 1/sqrt(error.weight)
-inverse.log.errors <- 1/log(error.weight)
+datSE <- subset(fulldat, strat=="SE")
+datSE <- droplevels(datSE)
 
-log.errors <- log(error.weight)
-sqrt.errors <- sqrt(error.weight)
-
-summary(error.weight/10000)
-
-hist(error.weight/10000)
-
-m2 <- glmer(presence ~ PA + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"), weights=error.weight.small)
-m2.noweights <- glmer(presence ~ PA + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-
-
-### ---------------------- ###
-####        MODELS        ####
-### -----------------------###
-
-#### ---- CANDIDATE MODEL SET ---- ####
-
-# presence/absence ~
-
-# # protected area models
-# strategy + propPA
-# strategy + propPA + elevation
-# strategy + propPA + elevation + winterclimate
-# strategy + propPA + elevation + springclimate
-# strategy + propPA + elevation + winterclimate + springclimate 
-
-# # habitat models
-# strategy + habitat
-# strategy + habitat + elevation
-# strategy + habitat + elevation + winterclimate
-# strategy + habitat + elevation + springclimate
-# strategy + habitat + elevation + winterclimate + springclimate
-
-# # protected area + habitat models
-# strategy + propPA + habitat
-# strategy + propPA + habitat + elevation
-# strategy + propPA + habitat + elevation + winterclimate
-# strategy + propPA + habitat + elevation + springclimate
-# strategy + propPA + habitat + elevation + winterclimate + springclimate
-
-# RANDOM EFFECT: all models include nested random effects of individual
-# ????? do I need some sort of spatial random effect e.g. geographic region needs to be nested within individual??????
-
-####################################
-
-
-# modelnames <- c("m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11","m12","m13","m14","m15","m16")
-
-# NULoverlap MODEL
-m1 <- glmer(presence ~ 1 + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-
-# # protected area models
-# strategy + propPA
-# strategy + propPA + elevation
-# strategy + propPA + elevation + spei.Mar
-# strategy + propPA + elevation + spei.Aug
-# strategy + propPA + elevation + spei.Mar + spei.Aug
-
-m2 <- glmer(presence ~ PA + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-m3 <- glmer(presence ~ PA + elevation + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-m4 <- glmer(presence ~ PA + elevation + spei.Mar + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-m5 <- glmer(presence ~ PA + elevation + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-m6 <- glmer(presence ~ PA + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-
-# # habitat models
-# strategy + habitat
-# strategy + habitat + elevation
-# strategy + habitat + elevation + winterclimate
-# strategy + habitat + elevation + springclimate
-# strategy + habitat + elevation + winterclimate + springclimate
-
-m7 <- glmer(presence ~ habitat + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-m8 <- glmer(presence ~ habitat + elevation + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-m9 <- glmer(presence ~ habitat + elevation + spei.Mar + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-m10 <- glmer(presence ~ habitat + elevation + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
-m11 <- glmer(presence ~ habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+datSW <- subset(fulldat, strat=="SW")
+datSW <- droplevels(datSW)
 
 # 
+# error.weight <- with(dat, pi*error.major*error.minor)
+# error.weight.small <- error.weight/10000
 # 
-# # # protected area + habitat models
-# # strategy + propPA + habitat
-# # strategy + propPA + habitat + elevation
-# # strategy + propPA + habitat + elevation + winterclimate
-# # strategy + propPA + habitat + elevation + springclimate
-# # strategy + propPA + habitat + elevation + winterclimate + springclimate
+# inverse.sqrt.errors <- 1/sqrt(error.weight)
+# inverse.log.errors <- 1/log(error.weight)
 # 
-# assign(modelnames[12], glmer(presence ~ PA.cont + pc1 + pc2 + hab.un + hab.wet + (1|name), data=newdat, family=binomial, control=glmerControl(optimizer="bobyqa")))
-# assign(modelnames[13], glmer(presence ~ PA.cont + pc1 + pc2 + hab.un + hab.wet + rescale.elev + (1|name), data=newdat, family=binomial, control=glmerControl(optimizer="bobyqa")))
-# assign(modelnames[14], glmer(presence ~ PA.cont + pc1 + pc2 + hab.un + hab.wet + rescale.elev + spei.Mar + (1|name), data=newdat, family=binomial, control=glmerControl(optimizer="bobyqa")))
-# assign(modelnames[15], glmer(presence ~ PA.cont + pc1 + pc2 + hab.un + hab.wet + rescale.elev + spei.Aug + (1|name), data=newdat, family=binomial, control=glmerControl(optimizer="bobyqa")))
-# assign(modelnames[16], glmer(presence ~ PA.cont + pc1 + pc2 + hab.un + hab.wet + rescale.elev + spei.Mar + spei.Aug + (1|name), data=newdat, family=binomial, control=glmerControl(optimizer="bobyqa")))
+# log.errors <- log(error.weight)
+# sqrt.errors <- sqrt(error.weight)
 # 
-# models <- list(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16)
-# AICoutput <- AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16)
-# modellist <- lapply(models, formula)
+# summary(error.weight/10000)
 # 
+# hist(error.weight/10000)
 # 
-# ############### assign(modelnames[1], glmer(presence ~ strat + PA.cont + pc1 + pc2 + hab.un + hab.wet + rescale.elev + spei.Mar + spei.Aug + (1|name), data=newdat, family=binomial, control=glmerControl(optimizer="bobyqa")))
-# 
-# 
-# calculate.AIC<-function(aictable,modellist) {
-#   modelnames<-modellist
-#   delta.aic<-aictable$AIC-min(aictable$AIC)
-#   lik.aic<-exp(-delta.aic/2)
-#   aic.w<-lik.aic/(sum(lik.aic))
-#   aic.table<-data.frame(modelnames,aictable,delta.aic,lik.aic,aic.w)
-# }
-# 
-# output <- calculate.AIC(AICoutput, as.character(modellist))
-# aic.ordered<-output[rev(order(output$aic.w)),]
-# 
-# # see AIC table
-# aic.ordered[,3:6] <- round(aic.ordered[,c(3:6)], digits = 3)
-# print(aic.ordered)
+# m2 <- glmer(presence ~ PA + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"), weights=error.weight.small)
+# m2.noweights <- glmer(presence ~ PA + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+
+### ---------------------------------------- ###
+####                 MODELS                 ####
+### ------------------------ ----------------###
+### change to fulldat, SE, or SW
+
+SW <- TRUE
+
+if (SW) dat <- datSW
+if (!SW) dat <- datSE
+
+### removing Reacher, who's single stopover is driving a strong interaction between PA and unsuitable habitat
+# dat <- subset(dat, name!="Reacher")
+
+# to change the habitat reference level from agriculture to unsuitable - a reference level of agriculture probably makes sense in Europe since that is the predominant land cover type
+# dat$habitat <- factor(dat$habitat, levels=c("unsuitable","agriculture","scrub.grassland","wetland.water","forest"))
+
+m <- list()
+
+# NULL MODEL
+m[[1]] <- glmer(presence ~ 1 + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+####------------------- PROTECTED AREA MODELS -------------------####
+
+# PA
+# PA + elevation
+# PA + elevation + winter climate
+# PA + elevation + spring climate
+# PA + elevation + winter climate + spring climate
+# PA*elevation
+# PA*elevation + winter climate
+# PA*elevation + spring climate
+# PA*elevation + winter climate + spring climate
+
+### main effects only
+m[[2]] <- glmer(presence ~ PA + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[3]] <- glmer(presence ~ PA + elevation + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[4]] <- glmer(presence ~ PA + elevation + spei.Mar + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[5]] <- glmer(presence ~ PA + elevation + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[6]] <- glmer(presence ~ PA + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+# ### interaction between PA x elevation
+# m[[7]] <- glmer(presence ~ PA*elevation + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# m[[8]] <- glmer(presence ~ PA*elevation + winter climate + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# m[[9]] <- glmer(presence ~ PA*elevation + spring climate + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# m[[10]] <- glmer(presence ~ PA*elevation + winter climate + spring climate + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+####------------------- HABITAT MODELS -------------------####
+# habitat
+# habitat + elevation
+# habitat + elevation + winterclimate
+# habitat + elevation + springclimate
+# habitat + elevation + winterclimate + springclimate
+# habitat*elevation
+# habitat*elevation + winterclimate
+# habitat*elevation + springclimate
+# habitat*elevation + winterclimate + springclimate
+# habitat*elevation
+# habitat*elevation + winterclimate
+# habitat*elevation + springclimate
+# habitat*elevation + winterclimate + springclimate
+
+### main effects only
+m[[7]] <- glmer(presence ~ habitat + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[8]] <- glmer(presence ~ habitat + elevation + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[9]] <- glmer(presence ~ habitat + elevation + spei.Mar + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[10]] <- glmer(presence ~ habitat + elevation + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[11]] <- glmer(presence ~ habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+# ### interaction between habitat x elevation
+# m[[16]] <- glmer(presence ~ habitat*elevation + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# m[[17]] <- glmer(presence ~ habitat*elevation + spei.Mar + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# m[[18]] <- glmer(presence ~ habitat*elevation + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# m[[19]] <- glmer(presence ~ habitat*elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+
+####------------------- PROTECTED AREA + HABITAT MODELS -------------------####
+# PA + habitat
+# PA + habitat + elevation
+# PA + habitat + elevation + winterclimate
+# PA + habitat + elevation + springclimate
+# PA + habitat + elevation + winterclimate + springclimate
+# PA*elevation
+# PA*elevation + winter climate
+# PA*elevation + spring climate
+# PA*elevation + winter climate + spring climate
+
+### main effects only
+m[[12]] <- glmer(presence ~ PA + habitat + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[13]] <- glmer(presence ~ PA + habitat + elevation + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[14]] <- glmer(presence ~ PA + habitat + elevation + spei.Mar + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[15]] <- glmer(presence ~ PA + habitat + elevation + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[16]] <- glmer(presence ~ PA + habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+### interaction between PA x habitat
+m[[17]] <- glmer(presence ~ PA*habitat + elevation + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[18]] <- glmer(presence ~ PA*habitat + elevation + spei.Mar + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[19]] <- glmer(presence ~ PA*habitat + elevation + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+m[[20]] <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+#SWmodels[[21]] <- glmer(presence ~ PA*habitat + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+# ### interaction between PA x habitat x elevation
+# m[[29]] <- glmer(presence ~ PA*habitat*elevation + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# m[[30]] <- glmer(presence ~ PA*habitat*elevation + spei.Mar + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# m[[31]] <- glmer(presence ~ PA*habitat*elevation + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# m[[32]] <- glmer(presence ~ PA*habitat*elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+
+# # 
+# saveobjects <- which(ls() == "SEmodels" | ls() == "SWmodels")
+
+# #allPAobjects <- which(ls() == "PA.subset" | ls() == "r" | ls() == "Europeraster" | ls() == "corine.crs")
+
+# toremove <- ls()[-saveobjects]
+
+# rm(list=toremove)
+
+####================= MODEL OUTPUT =================####
+
+setwd(paste(parentwd, "/scripts/", sep=""))
+source("source code cuckoo model selection.R")
+
+### ---------------------------------------- ###
+####              PLOT OUTPUT               ####
+### ------------------------ ----------------###
+
+### SW cuckoos
+newdat <- data.frame(habitat=levels(datSW$habitat), PA=rep(levels(datSW$PA), 5), elevation=mean(datSW$elevation), spei.Mar=mean(datSW$spei.Mar), spei.Aug=mean(datSW$spei.Aug))
+
+newdat$prob <- predict(SWmodels[[20]], newdata=newdat, type="response", re.form=NA)
+
+interaction.plot(newdat$habitat, newdat$PA, newdat$prob, xlab=c("Habitat"), ylab=c("Predicted Probability"), trace.label=c("PA"))
+title("Predicted probability of presence (SW) at mean elevation and mean climate values, 200km")
+
+### SE cuckoos
+newdat <- data.frame(habitat=levels(datSE$habitat), PA=rep(levels(datSE$PA), 5), elevation=mean(datSE$elevation), spei.Mar=mean(datSE$spei.Mar), spei.Aug=mean(datSE$spei.Aug))
+
+newdat$prob <- predict(SEmodels[[20]], newdata=newdat, type="response", re.form=NA)
+
+interaction.plot(newdat$habitat, newdat$PA, newdat$prob, xlab=c("Habitat"), ylab=c("Predicted Probability"), trace.label=c("PA"))
+title("Predicted probability of presence (SE) at mean elevation and mean climate values, 200km")
+#####################################################################
+#####################################################################
+#####################################################################
+#####################################################################
+#####################################################################
+#####################################################################
+
+
 # 
 # 
 # 

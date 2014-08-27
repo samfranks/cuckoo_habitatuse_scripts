@@ -34,7 +34,7 @@ extractionwd <- c("/corine PA elevation spei extracted values points/")
 #### SET OTHER VARIABLES ####
 
 #randomradius <- c(50, 100, 200, 500)
-randomradius <- c(50)
+randomradius <- c(200)
 
 present <- FALSE
 

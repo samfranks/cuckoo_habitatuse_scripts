@@ -488,276 +488,276 @@ for (i in 1:length(newallbird)){
 ########################################################
 ########################################################
 
-###-----------------------------------------------###
-#         Load resampled datasets to add distances, bearings, and movement types
-###-----------------------------------------------###
+# ###-----------------------------------------------###
+# #         Load resampled datasets to add distances, bearings, and movement types
+# ###-----------------------------------------------###
 
-###########################################################
-#
-#   NOTE
-#
-#   distances and bearings in following code are calculated based on resampled values for each resampling
-#
-###########################################################
+# ###########################################################
+# #
+# #   NOTE
+# #
+# #   distances and bearings in following code are calculated based on resampled values for each resampling
+# #
+# ###########################################################
 
-### --- Load data --- ###
+# ### --- Load data --- ###
 
-setwd("C:/Users/samf/Documents/Git/cuckoos/data/")
-dd <- read.csv("allbirdfinal - resampling.csv", header=T)
+# setwd("C:/Users/samf/Documents/Git/cuckoos/data/")
+# dd <- read.csv("allbirdfinal - resampling.csv", header=T)
 
-byname <- dd$name
+# byname <- dd$name
 
-allbird <- split(dd, list(byname))
+# allbird <- split(dd, list(byname))
 
 
-### ----------- Calculate distance moved, bearing, movement types, movement groups ---------- ###
+# ### ----------- Calculate distance moved, bearing, movement types, movement groups ---------- ###
 
-### --- Distance + Bearing --- ###
+# ### --- Distance + Bearing --- ###
 
-# add distance/bearing variables for distance moved between previous and current location, and bearing taken to get there
-# first location will be NA (ie. no previous location)
+# # add distance/bearing variables for distance moved between previous and current location, and bearing taken to get there
+# # first location will be NA (ie. no previous location)
 
-# for all rows of each list element of allbird, create new variables: distance, bearing - calculate these based on the original lat/long variables
+# # for all rows of each list element of allbird, create new variables: distance, bearing - calculate these based on the original lat/long variables
 
-# remove reference points
+# # remove reference points
 
-# remove points where semi-major error ellipse is > 5km (5000m)
+# # remove points where semi-major error ellipse is > 5km (5000m)
 
-newallbird <- list()
+# newallbird <- list()
 
-for (i in 1:length(allbird)){
+# for (i in 1:length(allbird)){
   
-  ### --- STEP 1: split list according to resample no. --- ###
-  dat <- allbird[[i]]
+  # ### --- STEP 1: split list according to resample no. --- ###
+  # dat <- allbird[[i]]
   
-  # remove reference points and any other weird points outside of the range we'd expect
+  # # remove reference points and any other weird points outside of the range we'd expect
   
-  # use newlongs & newlats if we want to calculate new variables based on resampled points
-  # use long & lat to calculate new variables based on original location points
+  # # use newlongs & newlats if we want to calculate new variables based on resampled points
+  # # use long & lat to calculate new variables based on original location points
   
-  #coordinates(dat) <- c("newlongs","newlats")
-  coordinates(dat) <- c("long","lat")
+  # #coordinates(dat) <- c("newlongs","newlats")
+  # coordinates(dat) <- c("long","lat")
   
-  proj4string(dat) <- CRS("+init=epsg:3395") # set projection and datum information for cuckoo data, which are in wGS 84/World Mercator projection coordinates (set earlier in script)
-  newdat <- spTransform(dat, CRS("+proj=longlat +datum=WGS84")) # transform to long/lats which are required for the distance calculation
+  # proj4string(dat) <- CRS("+init=epsg:3395") # set projection and datum information for cuckoo data, which are in wGS 84/World Mercator projection coordinates (set earlier in script)
+  # newdat <- spTransform(dat, CRS("+proj=longlat +datum=WGS84")) # transform to long/lats which are required for the distance calculation
   
-  newdat <- as.data.frame(newdat)
-  newdat <- Subset(newdat, long > -19) # remove reference points in North America
+  # newdat <- as.data.frame(newdat)
+  # newdat <- Subset(newdat, long > -19) # remove reference points in North America
   
-  # add resample no. variable to be able to split dataset according to sample number
-  newdat$tcycle <- as.factor(newdat$tcycle)
-  l <- droplevels(newdat$tcycle)
-  resample.no <- c()
+  # # add resample no. variable to be able to split dataset according to sample number
+  # newdat$tcycle <- as.factor(newdat$tcycle)
+  # l <- droplevels(newdat$tcycle)
+  # resample.no <- c()
   
-  for (j in 1:100){
-    x <- rep(j,length(levels(l)))
-    resample.no <- c(resample.no, x)
-  }
+  # for (j in 1:100){
+    # x <- rep(j,length(levels(l)))
+    # resample.no <- c(resample.no, x)
+  # }
   
-  newdat <- data.frame(newdat, resample.no)
-  newdat$resample.no <- as.factor(resample.no)
+  # newdat <- data.frame(newdat, resample.no)
+  # newdat$resample.no <- as.factor(resample.no)
   
-  # remove observations where semi-major axis error is > 5000km
-  newdat.smallerror <- Subset(newdat, error.major <= 5000)
+  # # remove observations where semi-major axis error is > 5000km
+  # newdat.smallerror <- Subset(newdat, error.major <= 5000)
   
-  byresampleno <- newdat.smallerror$resample.no
-  datbysample <- split(newdat.smallerror, byresampleno)
+  # byresampleno <- newdat.smallerror$resample.no
+  # datbysample <- split(newdat.smallerror, byresampleno)
 
-  ### --- STEP 2: lapply function distbearmvmt across all 100 resamples in list datbysample, to calculate distance moved, bearing, and movement groups and types between tcycles --- ###
+  # ### --- STEP 2: lapply function distbearmvmt across all 100 resamples in list datbysample, to calculate distance moved, bearing, and movement groups and types between tcycles --- ###
   
-  ### --- FUNCTION to measure distance moved between each transmission cycle, bearing direction between each tcycle, and whether movements between tcycles were stopovers or migratory --- ###
+  # ### --- FUNCTION to measure distance moved between each transmission cycle, bearing direction between each tcycle, and whether movements between tcycles were stopovers or migratory --- ###
   
-  distbearmvmt <- function(input){ # requires 2 variables called newlongs & newlats or long & lat
-    # use newlongs & newlats to calculate distances based on resampled points
-    # use long & lat to calculate distances based on original measured location point
+  # distbearmvmt <- function(input){ # requires 2 variables called newlongs & newlats or long & lat
+    # # use newlongs & newlats to calculate distances based on resampled points
+    # # use long & lat to calculate distances based on original measured location point
     
-    ### DISTANCE & BEARING
-    #dist.cuckoo <- input[,c("newlongs","newlats")]
-    #coordinates(dist.cuckoo) <- c("newlongs", "newlats")
-    dist.cuckoo <- input[,c("long","lat")]
-    coordinates(dist.cuckoo) <- c("long", "lat")
-    proj4string(dist.cuckoo) <- CRS("+proj=longlat +datum=WGS84") # set coordinates as long/lats which are required for the distance calculation
+    # ### DISTANCE & BEARING
+    # #dist.cuckoo <- input[,c("newlongs","newlats")]
+    # #coordinates(dist.cuckoo) <- c("newlongs", "newlats")
+    # dist.cuckoo <- input[,c("long","lat")]
+    # coordinates(dist.cuckoo) <- c("long", "lat")
+    # proj4string(dist.cuckoo) <- CRS("+proj=longlat +datum=WGS84") # set coordinates as long/lats which are required for the distance calculation
     
-    d1 <- dist.cuckoo@coords
-    d2 <- dist.cuckoo@coords[-1,] # create new matrix minus the first row so that d2 starts at the second observation
-    last.d2 <- matrix(c(0,0), nrow=1, dimnames=list(1, c("newlongs","newlats"))) # create a placeholder last row in the second distance matrix
-    d2 <- rbind(d2, c(0,0))
+    # d1 <- dist.cuckoo@coords
+    # d2 <- dist.cuckoo@coords[-1,] # create new matrix minus the first row so that d2 starts at the second observation
+    # last.d2 <- matrix(c(0,0), nrow=1, dimnames=list(1, c("newlongs","newlats"))) # create a placeholder last row in the second distance matrix
+    # d2 <- rbind(d2, c(0,0))
     
-    dist <- distCosine(d1,d2)/1000 # distance between points, in km
-    bear <- bearing(d1,d2) # bearing between points
-    dist <- c(NA,dist[-length(dist)])
-    bear <- c(NA,bear[-length(bear)])
+    # dist <- distCosine(d1,d2)/1000 # distance between points, in km
+    # bear <- bearing(d1,d2) # bearing between points
+    # dist <- c(NA,dist[-length(dist)])
+    # bear <- c(NA,bear[-length(bear)])
     
-    distbear <- data.frame(input, distance=dist, bearing=bear)
+    # distbear <- data.frame(input, distance=dist, bearing=bear)
     
-    ### MOVEMENT GROUPS
-    mgroup <- rep(NA,nrow(distbear))
+    # ### MOVEMENT GROUPS
+    # mgroup <- rep(NA,nrow(distbear))
     
-    for (n in 1:nrow(distbear)){
-      if (is.na(distbear$distance[n])) {
-        mgroup[n] <- 1
-      } else if (distbear$distance[n] <= 100) {
-        mgroup[n] <- mgroup[n-1]
-      } else {mgroup[n] <- mgroup[n-1] + 1}
-    }
+    # for (n in 1:nrow(distbear)){
+      # if (is.na(distbear$distance[n])) {
+        # mgroup[n] <- 1
+      # } else if (distbear$distance[n] <= 100) {
+        # mgroup[n] <- mgroup[n-1]
+      # } else {mgroup[n] <- mgroup[n-1] + 1}
+    # }
     
-    ### MOVEMENT TYPES
-    mtype <- c("C", rep(NA, nrow(distbear)-1))
+    # ### MOVEMENT TYPES
+    # mtype <- c("C", rep(NA, nrow(distbear)-1))
     
-    for (n in 2:(nrow(distbear)-1)){
-      if (mgroup[n] != mgroup[n-1] & mgroup[n] != mgroup[n+1]) {
-        mtype[n] <- "M"
-      } else {
-        mtype[n] <- "S"
-      }
-    }
+    # for (n in 2:(nrow(distbear)-1)){
+      # if (mgroup[n] != mgroup[n-1] & mgroup[n] != mgroup[n+1]) {
+        # mtype[n] <- "M"
+      # } else {
+        # mtype[n] <- "S"
+      # }
+    # }
     
-    completedata <- data.frame(distbear,mgroup,mtype)
-    return(completedata)
+    # completedata <- data.frame(distbear,mgroup,mtype)
+    # return(completedata)
     
-  }
+  # }
   
-  dat.allvar <- lapply(datbysample, distbearmvmt)
-  dat.allvar.onebird <- do.call(rbind, dat.allvar)
-  newallbird[[i]] <- dat.allvar.onebird
+  # dat.allvar <- lapply(datbysample, distbearmvmt)
+  # dat.allvar.onebird <- do.call(rbind, dat.allvar)
+  # newallbird[[i]] <- dat.allvar.onebird
   
-}
-
-
-# write data files with new variables (distance, movement groups, etc) to .csv - one large with all birds, and separate files for each bird
-
-new.allbirdfinal <- do.call(rbind, newallbird) # rbind all list elements
-
-write.csv(new.allbirdfinal, "allbirdfinal - resampling with distances and movement groups.csv", row.names=FALSE) # write entire file to csv
-
-# write each individual's bootstrapped data to an individual csv to be called again later
-
-setwd("C:/Users/samf/Documents/Git/cuckoos/data/resampled data with uncertainty 100 bootstraps + distance, movement groups, etc")
-
-for (i in 1:length(newallbird)){
-  write.csv(newallbird[[i]], paste(newallbird[[i]]$name[1],".csv", sep=""), row.names=FALSE)
-}
-
-# long/lat are in CRS("+proj=longlat +datum=WGS84")
-# newlongs/newlats are in CRS("+init=epsg:3395")
-    
-######################################################
-######################################################
-######################################################
-######################################################
-######################################################
-
-  
-# ### --- Movement group + Movement type --- ###
-# 
-# # for each movement, classify movement type as migratory or stopover
-# # if distance < 25km, movement is a stopover (S), if >25km, movement is migration (M)
-# # ?????????? work out what the best distance is to use for categorising movements - somewhere between 20-30km?
-# # for every group of movements (ie. SSSSMMMSSS are 3 groups), give those observations the same movement group number
-# 
-# ### Histogram of cuckoo distance movements
-# 
-# hist(cuckoo.use$distance)
-# 
-# par(mfrow=c(2,2))
-# hist(subset(cuckoo.use, distance < 100)$distance, main=c("d < 100km"), xlab=c("Distance (km)"))
-# hist(subset(cuckoo.use, distance > 100 & distance < 500)$distance, main=c("100km < d < 500km"), xlab=c("Distance (km)"))
-# hist(subset(cuckoo.use, distance > 500)$distance, main=c("d > 500km"), xlab=c("Distance (km)"))
-# hist(subset(cuckoo.use, distance > 20 & distance < 200)$distance, main=c("20km < d < 200km"), breaks=20, xlab=c("Distance (km)"))
-# 
-# 
-# # use <= 30km as the threshold for distinguishing between a stopover (S) and a migration (M), and between movement groups (e.g. 2 stopovers that might not be separated by a migration)
-# 
-# ### Movement numbers
-# 
-# # make a blank variable in which to put movement groups
-# mgroup <- rep(NA,nrow(cuckoo.use))
-# 
-# for (n in 1:nrow(cuckoo.use)){
-#   if (is.na(cuckoo.use$distance[n])) {
-#     # or alternatively, for loop counts from 2:nrow... and if(is.na(cuckoo.use$distance[n]))
-#     mgroup[n] <- 1
-#   } else if (cuckoo.use$distance[n] <= 30) {
-#     mgroup[n] <- mgroup[n-1]
-#   } else {mgroup[n] <- mgroup[n-1] + 1}
 # }
-# 
-# ###################################################
-# 
-# ##################### OLD CODE FOR MOVEMENT TYPE ##########################
-# # create new variable for movement type
-# # if distance is NA, then this is the capture occasion ("C")
-# # if bearing is NA, then could be capture occasion or bird didn't move between subsequent observations
-# 
-# # mtype <- ifelse(cuckoo.use$distance <= 30, c("S"), c("M"))
-# # mtype[is.na(mtype)] <- c("C")
-# # mtype <- as.factor(mtype)
-# 
-# ####################################################
-# 
-# ######### OLD CODE FOR MOVEMENT GROUP USING "M" and "S" QUALIFIERS, WHICH WILL GIVE INCORRECT RESULTS IF TWO STOPOVERS IN SEQUENCE ARE IN DIFFERENT LOCATIONS #########
-# # for each individual cuckoo (call using $name), get row number [x] of first observation for that bird (the capture observation) - that is starting point, and mgroup[x] <- 1, then proceed into for loop, where i counts (x+1):nrow(cuckoo$name[individual name])
+
+
+# # write data files with new variables (distance, movement groups, etc) to .csv - one large with all birds, and separate files for each bird
+
+# new.allbirdfinal <- do.call(rbind, newallbird) # rbind all list elements
+
+# write.csv(new.allbirdfinal, "allbirdfinal - resampling with distances and movement groups.csv", row.names=FALSE) # write entire file to csv
+
+# # write each individual's bootstrapped data to an individual csv to be called again later
+
+# setwd("C:/Users/samf/Documents/Git/cuckoos/data/resampled data with uncertainty 100 bootstraps + distance, movement groups, etc")
+
+# for (i in 1:length(newallbird)){
+  # write.csv(newallbird[[i]], paste(newallbird[[i]]$name[1],".csv", sep=""), row.names=FALSE)
+# }
+
+# # long/lat are in CRS("+proj=longlat +datum=WGS84")
+# # newlongs/newlats are in CRS("+init=epsg:3395")
+    
+# ######################################################
+# ######################################################
+# ######################################################
+# ######################################################
+# ######################################################
+
+  
+# # ### --- Movement group + Movement type --- ###
+# # 
+# # # for each movement, classify movement type as migratory or stopover
+# # # if distance < 25km, movement is a stopover (S), if >25km, movement is migration (M)
+# # # ?????????? work out what the best distance is to use for categorising movements - somewhere between 20-30km?
+# # # for every group of movements (ie. SSSSMMMSSS are 3 groups), give those observations the same movement group number
+# # 
+# # ### Histogram of cuckoo distance movements
+# # 
+# # hist(cuckoo.use$distance)
+# # 
+# # par(mfrow=c(2,2))
+# # hist(subset(cuckoo.use, distance < 100)$distance, main=c("d < 100km"), xlab=c("Distance (km)"))
+# # hist(subset(cuckoo.use, distance > 100 & distance < 500)$distance, main=c("100km < d < 500km"), xlab=c("Distance (km)"))
+# # hist(subset(cuckoo.use, distance > 500)$distance, main=c("d > 500km"), xlab=c("Distance (km)"))
+# # hist(subset(cuckoo.use, distance > 20 & distance < 200)$distance, main=c("20km < d < 200km"), breaks=20, xlab=c("Distance (km)"))
+# # 
+# # 
+# # # use <= 30km as the threshold for distinguishing between a stopover (S) and a migration (M), and between movement groups (e.g. 2 stopovers that might not be separated by a migration)
+# # 
+# # ### Movement numbers
+# # 
+# # # make a blank variable in which to put movement groups
+# # mgroup <- rep(NA,nrow(cuckoo.use))
+# # 
+# # for (n in 1:nrow(cuckoo.use)){
+# #   if (is.na(cuckoo.use$distance[n])) {
+# #     # or alternatively, for loop counts from 2:nrow... and if(is.na(cuckoo.use$distance[n]))
+# #     mgroup[n] <- 1
+# #   } else if (cuckoo.use$distance[n] <= 30) {
+# #     mgroup[n] <- mgroup[n-1]
+# #   } else {mgroup[n] <- mgroup[n-1] + 1}
+# # }
+# # 
+# # ###################################################
+# # 
+# # ##################### OLD CODE FOR MOVEMENT TYPE ##########################
+# # # create new variable for movement type
+# # # if distance is NA, then this is the capture occasion ("C")
+# # # if bearing is NA, then could be capture occasion or bird didn't move between subsequent observations
+# # 
+# # # mtype <- ifelse(cuckoo.use$distance <= 30, c("S"), c("M"))
+# # # mtype[is.na(mtype)] <- c("C")
+# # # mtype <- as.factor(mtype)
+# # 
+# # ####################################################
+# # 
+# # ######### OLD CODE FOR MOVEMENT GROUP USING "M" and "S" QUALIFIERS, WHICH WILL GIVE INCORRECT RESULTS IF TWO STOPOVERS IN SEQUENCE ARE IN DIFFERENT LOCATIONS #########
+# # # for each individual cuckoo (call using $name), get row number [x] of first observation for that bird (the capture observation) - that is starting point, and mgroup[x] <- 1, then proceed into for loop, where i counts (x+1):nrow(cuckoo$name[individual name])
+# # # 
+# # # for (j in 1:31){ # loop counts through cuckoo names
+# # #   a <- min(which(cuckoo.use$name==levels(cuckoo.use$name)[j])) # row number of first observation of cuckoo j
+# # #   b <- max(which(cuckoo.use$name==levels(cuckoo.use$name)[j])) # row number of last observation of cuckoo j
+# # # 
+# # #   mgroup[a] <- 1  # set capture occations as movement group 1
+# # #   
+# # #   for(i in (a+1):b){  # loops through rows of each cuckoo
+# # #     if(mtype[i] == c("S") & mtype[i-1] == c("S")){          # stopover
+# # #       mgroup[i] <- mgroup[i-1]
+# # #     } else if(mtype[i] == c("S") & mtype[i-1] == c("M")){   # stopover
+# # #       mgroup[i] <- mgroup[i-1]
+# # #     } else if(mtype[i] == c("M") & mtype[i-1] == c("S")){   # migration
+# # #       mgroup[i] <- mgroup[i-1] + 1
+# # #     } else if(mtype[i] == c("M") & mtype[i-1] == c("M")){   # migration
+# # #       mgroup[i] <- mgroup[i-1] + 1
+# # #     } else if(mtype[i] == c("M") & mtype[i-1] == c("C")){   # if migration directly follows the capture occasion
+# # #       mgroup[i] <- mgroup[i-1] + 1
+# # #     } else {
+# # #       mgroup[i] <- mgroup[i-1]                          # stopover, if capture is followed by "S"
+# # #     }
+# # #   }
+# # #   
+# # # }
+# # 
+# # ####################################################
+# # 
+# # # add a variable, mtype2, to be able to subset data to include only movement groups where the # of rows for that group number are > 2
+# # 
+# # # for each cuckoo, if mgroup value is the same as the one before it and after it, then mtype2 = S, otherwise mtype2 = M, EXCEPT for the first observation for every cuckoo, which was the capture occasion
+# # # aka, if a bird has > 2 observations in a single movement group, then it constitutes as a stopover, even if the first observation was categorised as a migration (which brought it to that stopover)
+# # # in order to change the number of consecutive locations that is required to equal a stopover from 2 to something else, then will need to modify if/else statement
+# # 
+# # firsts <- rep(NA,31) # blank variable to hold row numbers of first row of data for each individual
+# # lasts <- rep(NA,31) # blank variable to hold row numbers of last row of data for each individual
 # # 
 # # for (j in 1:31){ # loop counts through cuckoo names
-# #   a <- min(which(cuckoo.use$name==levels(cuckoo.use$name)[j])) # row number of first observation of cuckoo j
-# #   b <- max(which(cuckoo.use$name==levels(cuckoo.use$name)[j])) # row number of last observation of cuckoo j
+# #   firsts[j] <- min(which(cuckoo.use$name==levels(cuckoo.use$name)[j])) # row number of first observation of cuckoo j
+# #   lasts[j] <- max(which(cuckoo.use$name==levels(cuckoo.use$name)[j])) # row number of last observation of cuckoo j
+# # }
 # # 
-# #   mgroup[a] <- 1  # set capture occations as movement group 1
+# # # loop to create mtype2 based on mgroup variable
+# # mtype <- rep(NA, nrow(cuckoo.use))
+# # 
+# # for (n in 1:nrow(cuckoo.use)){
 # #   
-# #   for(i in (a+1):b){  # loops through rows of each cuckoo
-# #     if(mtype[i] == c("S") & mtype[i-1] == c("S")){          # stopover
-# #       mgroup[i] <- mgroup[i-1]
-# #     } else if(mtype[i] == c("S") & mtype[i-1] == c("M")){   # stopover
-# #       mgroup[i] <- mgroup[i-1]
-# #     } else if(mtype[i] == c("M") & mtype[i-1] == c("S")){   # migration
-# #       mgroup[i] <- mgroup[i-1] + 1
-# #     } else if(mtype[i] == c("M") & mtype[i-1] == c("M")){   # migration
-# #       mgroup[i] <- mgroup[i-1] + 1
-# #     } else if(mtype[i] == c("M") & mtype[i-1] == c("C")){   # if migration directly follows the capture occasion
-# #       mgroup[i] <- mgroup[i-1] + 1
+# #   if (n %in% firsts == TRUE) {
+# #     mtype[n] <- "C"
+# #   } else {
+# #     if (mgroup[n] != mgroup[n-1] & mgroup[n] != mgroup[n+1]) {
+# #       mtype[n] <- "M"
 # #     } else {
-# #       mgroup[i] <- mgroup[i-1]                          # stopover, if capture is followed by "S"
+# #       mtype[n] <- "S"
 # #     }
 # #   }
-# #   
 # # }
-# 
-# ####################################################
-# 
-# # add a variable, mtype2, to be able to subset data to include only movement groups where the # of rows for that group number are > 2
-# 
-# # for each cuckoo, if mgroup value is the same as the one before it and after it, then mtype2 = S, otherwise mtype2 = M, EXCEPT for the first observation for every cuckoo, which was the capture occasion
-# # aka, if a bird has > 2 observations in a single movement group, then it constitutes as a stopover, even if the first observation was categorised as a migration (which brought it to that stopover)
-# # in order to change the number of consecutive locations that is required to equal a stopover from 2 to something else, then will need to modify if/else statement
-# 
-# firsts <- rep(NA,31) # blank variable to hold row numbers of first row of data for each individual
-# lasts <- rep(NA,31) # blank variable to hold row numbers of last row of data for each individual
-# 
-# for (j in 1:31){ # loop counts through cuckoo names
-#   firsts[j] <- min(which(cuckoo.use$name==levels(cuckoo.use$name)[j])) # row number of first observation of cuckoo j
-#   lasts[j] <- max(which(cuckoo.use$name==levels(cuckoo.use$name)[j])) # row number of last observation of cuckoo j
-# }
-# 
-# # loop to create mtype2 based on mgroup variable
-# mtype <- rep(NA, nrow(cuckoo.use))
-# 
-# for (n in 1:nrow(cuckoo.use)){
-#   
-#   if (n %in% firsts == TRUE) {
-#     mtype[n] <- "C"
-#   } else {
-#     if (mgroup[n] != mgroup[n-1] & mgroup[n] != mgroup[n+1]) {
-#       mtype[n] <- "M"
-#     } else {
-#       mtype[n] <- "S"
-#     }
-#   }
-# }
-# 
-# newcuckoo <- data.frame(cuckoo.use, mgroup, mtype)
-# newcuckoo[1:999,c("name","mgroup","mtype")]     # check output
-# 
-# write.csv(newcuckoo, "cuckoo movements for analysis.csv", row.names=FALSE)
+# # 
+# # newcuckoo <- data.frame(cuckoo.use, mgroup, mtype)
+# # newcuckoo[1:999,c("name","mgroup","mtype")]     # check output
+# # 
+# # write.csv(newcuckoo, "cuckoo movements for analysis.csv", row.names=FALSE)
 
 
 
