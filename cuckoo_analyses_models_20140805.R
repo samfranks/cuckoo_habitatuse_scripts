@@ -92,6 +92,8 @@ library(reshape)
 library(lme4)
 #library(AICcmodavg)
 library(arm)
+library(ggplot2)
+library(scales)
 
 
 ###----------------------------------------------###
@@ -331,6 +333,10 @@ m[[19]] <- glmer(presence ~ PA*habitat + elevation + spei.Aug + (1|name/mgroup/i
 m[[20]] <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
 m[[21]] <- glmer(presence ~ PA*habitat + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
 
+# SWmodels[[22]] <- glmer(presence ~ elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+# SEmodels[[22]] <- glmer(presence ~ elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
 # ### interaction between PA x habitat x elevation
 # m[[29]] <- glmer(presence ~ PA*habitat*elevation + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
 # m[[30]] <- glmer(presence ~ PA*habitat*elevation + spei.Mar + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
@@ -356,21 +362,62 @@ source("source code cuckoo model selection.R")
 ####              PLOT OUTPUT               ####
 ### ------------------------ ----------------###
 
+### Ben Bolker's function for calculating CIs on predictions from an merMod object and plotting the results from his RPubs GLMM worked examples
+# http://rpubs.com/bbolker/glmmchapter
+# by specifying re.form=NA we're saying that we want the population-level prediction, i.e. setting the random effects to zero and getting a prediction for an average (or unknown) group
+# Computing confidence intervals on the predicted values is relatively easy if we're willing to completely ignore the random effects, and the uncertainty of the random effects
+
+easyPredCI <- function(model,newdata,alpha=0.05) {
+  ## baseline prediction, on the linear predictor (logit) scale:
+  pred0 <- predict(model,re.form=NA,newdata=newdata)
+  ## fixed-effects model matrix for new data
+  X <- model.matrix(formula(model,fixed.only=TRUE)[-2],
+                    newdata)
+  beta <- fixef(model) ## fixed-effects coefficients
+  V <- vcov(model)     ## variance-covariance matrix of beta
+  pred.se <- sqrt(diag(X %*% V %*% t(X))) ## std errors of predictions
+  ## inverse-link (logistic) function: could also use plogis()
+  linkinv <- model@resp$family$linkinv
+  ## construct 95% Normal CIs on the link scale and
+  ##  transform back to the response (probability) scale:
+  crit <- -qnorm(alpha/2)
+  linkinv(cbind(lwr=pred0-crit*pred.se,
+                upr=pred0+crit*pred.se))
+  
+}
+  
 ### SW cuckoos
+
 newdat <- data.frame(habitat=levels(datSW$habitat), PA=rep(levels(datSW$PA), 5), elevation=mean(datSW$elevation), spei.Mar=mean(datSW$spei.Mar), spei.Aug=mean(datSW$spei.Aug))
 
-newdat$prob <- predict(SWmodels[[20]], newdata=newdat, type="response", re.form=NA)
+pred <- predict(SWmodels[[20]], newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(SWmodels[[20]], newdat))
 
-interaction.plot(newdat$habitat, newdat$PA, newdat$prob, xlab=c("Habitat"), ylab=c("Predicted Probability"), trace.label=c("PA"))
-title("Predicted probability of presence (SW) at mean elevation and mean climate values, 200km")
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (SW) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(axis.title.x = element_text(face="bold", size=16, vjust=0.1), axis.text.x = element_text(size=12), axis.title.y = element_text(face="bold", size=16, vjust=0.9), axis.text.y = element_text(size=12, vjust=0.5), legend.text=element_text(size=14), legend.title=element_text(size=14))
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("top model interaction plot 50km SW with error bars.jpg")
+
+# interaction.plot(newdat$habitat, newdat$PA, newdat$prob, xlab="Habitat", ylab=c"Predicted Probability", trace.label=c("PA"))
+#title("Predicted probability of presence (SW) at mean elevation and mean climate values, 200km")
 
 ### SE cuckoos
 newdat <- data.frame(habitat=levels(datSE$habitat), PA=rep(levels(datSE$PA), 5), elevation=mean(datSE$elevation), spei.Mar=mean(datSE$spei.Mar), spei.Aug=mean(datSE$spei.Aug))
 
-newdat$prob <- predict(SEmodels[[20]], newdata=newdat, type="response", re.form=NA)
+pred <- predict(SEmodels[[20]], newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(SEmodels[[20]], newdat))
 
-interaction.plot(newdat$habitat, newdat$PA, newdat$prob, xlab=c("Habitat"), ylab=c("Predicted Probability"), trace.label=c("PA"))
-title("Predicted probability of presence (SE) at mean elevation and mean climate values, 200km")
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (SE) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(axis.title.x = element_text(face="bold", size=16, vjust=0.1), axis.text.x = element_text(size=12), axis.title.y = element_text(face="bold", size=16, vjust=0.9), axis.text.y = element_text(size=12, vjust=0.5), legend.text=element_text(size=14), legend.title=element_text(size=14))
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("top model interaction plot 50km SE with error bars.jpg")
+
+#interaction.plot(newdat$habitat, newdat$PA, newdat$prob, xlab=c("Habitat"), ylab=c("Predicted Probability"), trace.label=c("PA"))
+#title("Predicted probability of presence (SE) at mean elevation and mean climate values, 200km")
 
 
 ########################################################################
@@ -384,8 +431,13 @@ title("Predicted probability of presence (SE) at mean elevation and mean climate
 
 fulldat <- with(alldata, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, desig=desiglevel))
 
-PAdat <- subset(fulldat, PA=="Y")
-PAdat <- droplevels(PAdat)
+
+PAdat <- data.frame(fulldat, desig=alldata$desiglevel)
+PAdat$desig <- factor(PAdat$desig, levels=c(levels(PAdat$desig), "N"))
+PAdat$desig[which(is.na(PAdat$desig))] <- "N"
+
+# PAdat <- subset(fulldat, PA=="Y")
+# PAdat <- droplevels(PAdat)
 
 datSE <- subset(PAdat, strat=="SE")
 datSE <- droplevels(datSE)
@@ -395,18 +447,38 @@ datSW <- droplevels(datSW)
 
 dat <- datSW
 
-dm1 <- glmer(presence ~ desig*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+desig.SWmodels[[1]] <- glmer(presence ~ desig*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
 
-dm2 <- glmer(presence ~ desig + habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+desig.SEmodels[[1]] <- glmer(presence ~ desig*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
 
-dm3 <- glmer(presence ~ desig + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# dm2 <- glmer(presence ~ desig + habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# 
+# dm3 <- glmer(presence ~ desig + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# 
+# dm4 <- glmer(presence ~ habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# 
+# dm5 <- glmer(presence ~ 1 + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
 
-dm4 <- glmer(presence ~ habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+#desig.SWmodels <- list()
+#desig.SWmodels[[1]] <- dm1
 
-dm5 <- glmer(presence ~ 1 + (1|name/mgroup/id), data=dat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+#desig.SEmodels <- list()
+#desig.SEmodels[[1]] <- dm1
 
-desig.SWmodels <- list()
-desig.SWmodels[[1]] <- dm1
+relgrad <- with(desig.SEmodels[[1]]@optinfo$derivs,solve(Hessian,gradient))
+max(abs(relgrad))
+
+setwd(paste(outputwd, "/GLMM results", sep=""))
+
+sink(paste("SW GLMM 3-level PA designation models ", randomradius, " km.txt", sep=""))
+cat("\n########==========  SW MODEL SUMMARIES ==========########\n", sep="\n")
+print(summary(desig.SWmodels[[1]]))
+sink()
+
+sink(paste("SE GLMM 3-level PA designation models ", randomradius, " km.txt", sep=""))
+cat("\n########==========  SW MODEL SUMMARIES ==========########\n", sep="\n")
+print(summary(desig.SEmodels[[1]]))
+sink()
 
 ### ---------------------------------------- ###
 ####              PLOT OUTPUT               ####

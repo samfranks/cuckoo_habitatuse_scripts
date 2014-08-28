@@ -96,6 +96,7 @@ chooserandompoint <- function(spdf) {
 }
 
 
+
 ###-----------------------------------------------------------###
 # EXTRACT CLIMATE VALUES FOR RANDOM STOPOVER POLYGON - CHECK FOR NA'S
 ###-----------------------------------------------------------###

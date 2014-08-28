@@ -11,8 +11,8 @@
 # SW <- FALSE
 # randomradius <- 50
 
-if (SW) load(paste("~/Git/cuckoos/SW ", randomradius, "km models 20140821.RData", sep=""))
-if (!SW) load(paste("~/Git/cuckoos/SE ", randomradius, "km models 20140821.RData", sep=""))
+#if (SW) load(paste("~/Git/cuckoos/SW ", randomradius, "km models 20140821.RData", sep=""))
+#if (!SW) load(paste("~/Git/cuckoos/SE ", randomradius, "km models 20140821.RData", sep=""))
 
 ### AIC function
 calculate.AIC<-function(aictable,modellist) {
@@ -34,39 +34,37 @@ for (i in 1:length(m)) {
 }
 
 modelsummary <- lapply(m, summary)
-names(modelsummary) <- rep(paste("m", 1:21, sep=""))
-AICoutput <- AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m18,m19,m20,m21)
+names(modelsummary) <- rep(paste("m", 1:22, sep=""))
+AICoutput <- AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m18,m19,m20,m21,m22)
 modellist <- lapply(m, formula)
 output <- calculate.AIC(AICoutput, as.character(modellist))
 aic.ordered<-output[rev(order(output$aic.w)),]
 output <- aic.ordered
 output[,3:6] <- round(output[,c(3:6)], digits = 3)
 
-setwd(paste(outputwd, "/GLMM results", sep=""))
-if (SW) write.csv(output, paste("SW models AIC output ", randomradius, "km.csv"))
-if (!SW) write.csv(output, paste("SE models AIC output ", randomradius, "km.csv"))
-
-
-if (SW){
-  sink(paste("SW GLMM models ", randomradius, " km.txt", sep=""))
-  cat("########==========  SW MODELS AIC OUTPUT ==========########\n", sep="\n")
-  print(output)
-  cat("\n########==========  SW MODELS ==========########\n", sep="\n")
-  print(m)
-  cat("\n########==========  SW MODEL SUMMARIES ==========########\n", sep="\n")
-  print(modelsummary)
-}
-
-if (!SW) {
-  sink(paste("SE GLMM models ", randomradius, " km.txt", sep=""))
-  cat("\n########==========  SE MODELS AIC OUTPUT ==========########\n", sep="\n")
-  print(output)
-  cat("\n########==========  SE MODELS ==========########\n", sep="\n")
-  print(m)
-  cat("\n########==========  SE MODEL SUMMARIES ==========########\n", sep="\n")
-  print(modelsummary)
-}
-
-sink()
-
-#dat$habitat <- factor(dat$habitat, levels=c("unsuitable","agriculture","scrub.grassland","wetland.water","forest"))
+# setwd(paste(outputwd, "/GLMM results", sep=""))
+# if (SW) write.csv(output, paste("SW models AIC output ", randomradius, "km.csv"))
+# if (!SW) write.csv(output, paste("SE models AIC output ", randomradius, "km.csv"))
+# 
+# 
+# if (SW){
+#   sink(paste("SW GLMM models ", randomradius, " km.txt", sep=""))
+#   cat("########==========  SW MODELS AIC OUTPUT ==========########\n", sep="\n")
+#   print(output)
+#   cat("\n########==========  SW MODELS ==========########\n", sep="\n")
+#   print(m)
+#   cat("\n########==========  SW MODEL SUMMARIES ==========########\n", sep="\n")
+#   print(modelsummary)
+# }
+# 
+# if (!SW) {
+#   sink(paste("SE GLMM models ", randomradius, " km.txt", sep=""))
+#   cat("\n########==========  SE MODELS AIC OUTPUT ==========########\n", sep="\n")
+#   print(output)
+#   cat("\n########==========  SE MODELS ==========########\n", sep="\n")
+#   print(m)
+#   cat("\n########==========  SE MODEL SUMMARIES ==========########\n", sep="\n")
+#   print(modelsummary)
+# }
+# 
+# sink()
