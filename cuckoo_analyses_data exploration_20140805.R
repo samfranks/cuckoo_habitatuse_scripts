@@ -92,7 +92,7 @@ library(reshape)
 library(lme4)
 #library(AICcmodavg)
 library(arm)
-
+library(ggplot2)
 
 ###----------------------------------------------###
 ####         SET WORKING DIRECTORIES		####
@@ -103,9 +103,9 @@ points <- TRUE
 
 cluster <- FALSE
 
-Mac <- TRUE
+Mac <- FALSE
 
-randomradius <- 200
+randomradius <- 50
 
 if (!cluster) {
   
@@ -140,6 +140,14 @@ absent <- read.csv(paste("absence data all variables points ", randomradius, " k
 present <- rename(present, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
 
 absent <- rename(absent, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
+
+newpresent <- rename(present, c("newlongs.epsg3035"="long.epsg3035", "newlats.epsg3035"="lat.epsg3035", "newlongs.epsg4326"="long.epsg4326", "newlats.epsg4326"="lat.epsg4326"))
+newabsent <- rename(absent, c("randomlong.epsg3035"="long.epsg3035", "randomlat.epsg3035"="lat.epsg3035", "randomlong.epsg4326"="long.epsg4326", "randomlat.epsg4326"="lat.epsg4326"))
+
+
+newabsent <- newabsent[,-which(names(newabsent) %in% c("nabsence","random.scale"))]
+
+alldata <- rbind(newpresent, newabsent)
 
 }
 
@@ -185,6 +193,37 @@ if (points) {
   par(mar=c(5,5,2,1))
   
   barplot(as.matrix(corine.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
+  
+  #### PROPORTION OF POINTS BY HABITAT, BY COUNTRY - POINTS ####
+  
+  if (points) {
+    
+    habitat.present <- prop.table(table(present$LAND.CLASS, present$country),2)
+    habitat.absent <- prop.table(table(absent$LAND.CLASS, absent$country), 2)
+    habitat.summary <- rbind(habitat.present, habitat.absent)
+    habitat.summary <- data.frame(habitat.summary, presence=rep(c("present","absent"), each=5), habitat=row.names(habitat.summary))
+    
+    habitatcountries <- reshape(habitat.summary, times=c(names(habitat.summary)[1:11]), timevar="country", varying=list(c(names(habitat.summary)[1:11])), direction="long")
+    
+    byhab.country <- with(habitatcountries, data.frame(presence, country, habitat, proportion=at.sea))
+    
+    p <- ggplot(byhab.country, aes(x=habitat, y=proportion, fill=presence)) + geom_bar(stat="identity", position="dodge")
+    countrylabels <- labs(x="Country", y="Proportion of points per habitat", title="Proportion of points per habitat, by country", size=4)
+    countrytheme <- theme(
+      axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
+      axis.text.x = element_text(size=12, angle=45, vjust=0.7), 
+      axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
+      axis.text.y = element_text(size=12, vjust=0.5),
+      legend.text=element_text(size=14), 
+      legend.title=element_text(size=14),
+      plot.title = element_text(face="bold", size=18)
+    )
+    p + countrylabels + countrytheme + scale_fill_manual(values=c("#0066CC", "#003366")) + facet_wrap(~ country, ncol=3)
+    
+    setwd(paste(outputwd, "/GLMM results/", sep=""))
+    ggsave("proportion of points per habitat by country.jpg")
+    
+  }
   
 }
 
@@ -270,8 +309,41 @@ if (points) {
   overlap.summary <- rbind(overlap.present, overlap.absent)
   
   par(mar=c(5,5,2,1))
-  barplot(as.matrix(overlap.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("N", "Y"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="In a protected area?", ylab="proportion of all stopovers \n overlapping protected areas")
+  barplot(as.matrix(overlap.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("N", "Y"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="In a protected area?", ylab="proportion of all points \n in protected areas")
   
+}
+
+
+#### PROPORTION OF ALL POINTS THAT OVERLAP WITH PROTECTED AREA, BY COUNTRY - POINTS ####
+
+if (points) {
+  
+  overlap.present <- prop.table(table(present$PAoverlap, present$country),2)
+  overlap.absent <- prop.table(table(absent$PAoverlap, absent$country), 2)
+  overlap.summary <- rbind(overlap.present, overlap.absent)
+  overlap.summary <- data.frame(overlap.summary, presence=rep(c("present","absent"), each=2), PA=row.names(overlap.summary))
+  overlapcountries <- subset(overlap.summary, PA=="Y")
+  
+  overlapcountries2 <- reshape(overlapcountries, times=c(names(overlapcountries)[1:11]), timevar="country", varying=list(c(names(overlapcountries)[1:11])), direction="long")
+  
+  inPA.country <- with(overlapcountries2, data.frame(presence, country, proportion=at.sea))
+  
+  p <- ggplot(inPA.country, aes(x=country, y=proportion, fill=presence)) + geom_bar(stat="identity", position="dodge")
+  countrylabels <- labs(x="Country", y="Proportion of points per country in a PA", title="Proportion of points per country in a protected area", size=4)
+  countrytheme <- theme(
+    axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
+    axis.text.x = element_text(size=12), 
+    axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
+    axis.text.y = element_text(size=12, vjust=0.5),
+    legend.text=element_text(size=14), 
+    legend.title=element_text(size=14),
+    plot.title = element_text(face="bold", size=18)
+  )
+  p + countrylabels + countrytheme + scale_fill_manual(values=c("#0066CC", "#003366"))
+  
+  setwd(paste(outputwd, "/GLMM results/", sep=""))
+  ggsave("proportion of points per country in a PA.jpg")
+
 }
 
 #### PROPORTION OF ALL STOPOVER POLYGONS THAT OVERLAP WITH PROTECTED AREA ####

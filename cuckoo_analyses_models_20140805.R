@@ -180,15 +180,6 @@ if (!points) {
 #
 ###########################################################################
 
-
-####===========	PROTECTED AREA AND HABITAT USE EFFECT ON PRESENCE/ABSENCE ==============####
-
-#### NOTES ####
-# Check for co-linearity among continuous explanatory variables using pairplots pairs() (habitat features, climate, elevation), and cor(x, method="spearman") 
-#   **** co-linearity is less of an issue now because habitat is coded as a categorical variable
-# Have not yet included designation level as an explanatory variable since analysis would need to be conducted on a subset of data (only stopovers which overlap with PAs); otherwise NAs are introduced and models do not include the same number of observations)
-# Initial analysis to include all sites, subsequent analysis may investigate the effect of designation level on use and interaction with habitat using only sites which intersect with Protected Areas
-
 ### ----------------------------- ###
 ####        DATA PREPARATION     ####
 ### ------------------------------###
@@ -198,11 +189,32 @@ if (!points) {
 newpresent <- rename(present, c("newlongs.epsg3035"="long.epsg3035", "newlats.epsg3035"="lat.epsg3035", "newlongs.epsg4326"="long.epsg4326", "newlats.epsg4326"="lat.epsg4326"))
 newabsent <- rename(absent, c("randomlong.epsg3035"="long.epsg3035", "randomlat.epsg3035"="lat.epsg3035", "randomlong.epsg4326"="long.epsg4326", "randomlat.epsg4326"="lat.epsg4326"))
 
+#### ADD STOPOVER DURATION TO DATA ####
+
+### creates 2 files: present.LOS and absent.LOS with length of stay data added onto present and absent datasets
+setwd(paste(parentwd, "/scripts/", sep=""))
+source("source code to add stopover duration data for analysis.R")
+
 ############# subset out only one round of absences
 #newabsent <- subset(newabsent, nabsence==1)
 newabsent <- newabsent[,-which(names(newabsent) %in% c("nabsence","random.scale"))]
+absent.LOS <- absent.LOS[,-which(names(absent.LOS) %in% c("nabsence","random.scale"))]
+
+present.LOS <- present.LOS[,-which(names(present.LOS) %in% c("datetime"))]
+present.LOS <- present.LOS[c(2,1,3:length(present.LOS))]
 
 alldata <- rbind(newpresent, newabsent)
+
+alldata.LOS <- rbind(present.LOS, absent.LOS)
+
+
+####===========	PROTECTED AREA AND HABITAT USE EFFECT ON PRESENCE/ABSENCE ==============####
+
+#### NOTES ####
+# Check for co-linearity among continuous explanatory variables using pairplots pairs() (habitat features, climate, elevation), and cor(x, method="spearman") 
+#   **** co-linearity is less of an issue now because habitat is coded as a categorical variable
+# Have not yet included designation level as an explanatory variable since analysis would need to be conducted on a subset of data (only stopovers which overlap with PAs); otherwise NAs are introduced and models do not include the same number of observations)
+# Initial analysis to include all sites, subsequent analysis may investigate the effect of designation level on use and interaction with habitat using only sites which intersect with Protected Areas
 
 
 #### ---- MODEL DATASET ---- ####
@@ -470,6 +482,8 @@ max(abs(relgrad))
 
 setwd(paste(outputwd, "/GLMM results", sep=""))
 
+
+
 sink(paste("SW GLMM 3-level PA designation models ", randomradius, " km.txt", sep=""))
 cat("\n########==========  SW MODEL SUMMARIES ==========########\n", sep="\n")
 print(summary(desig.SWmodels[[1]]))
@@ -484,19 +498,442 @@ sink()
 ####              PLOT OUTPUT               ####
 ### ------------------------ ----------------###
 
-### SE cuckoos
-newdat <- data.frame(habitat=levels(datSE$habitat), desig=rep(levels(datSE$desig), 5), elevation=mean(datSE$elevation), spei.Mar=mean(datSE$spei.Mar), spei.Aug=mean(datSE$spei.Aug))
-
-newdat$prob <- predict(dm1, newdata=newdat, type="response", re.form=NA)
-
-interaction.plot(newdat$habitat, newdat$desig, newdat$prob, xlab=c("Habitat"), ylab=c("Predicted Probability"), trace.label=c("Designation"))
-title("Predicted probability of presence (SE) at mean elevation and mean climate values, 50km")
+### Ben Bolker's population-level GLMM CI prediction function
+easyPredCI <- function(model,newdata,alpha=0.05) {
+  ## baseline prediction, on the linear predictor (logit) scale:
+  pred0 <- predict(model,re.form=NA,newdata=newdata)
+  ## fixed-effects model matrix for new data
+  X <- model.matrix(formula(model,fixed.only=TRUE)[-2],
+                    newdata)
+  beta <- fixef(model) ## fixed-effects coefficients
+  V <- vcov(model)     ## variance-covariance matrix of beta
+  pred.se <- sqrt(diag(X %*% V %*% t(X))) ## std errors of predictions
+  ## inverse-link (logistic) function: could also use plogis()
+  linkinv <- model@resp$family$linkinv
+  ## construct 95% Normal CIs on the link scale and
+  ##  transform back to the response (probability) scale:
+  crit <- -qnorm(alpha/2)
+  linkinv(cbind(lwr=pred0-crit*pred.se,
+                upr=pred0+crit*pred.se)) 
+}
 
 ### SW cuckoos
 newdat <- data.frame(habitat=levels(datSW$habitat), desig=rep(levels(datSW$desig), 5), elevation=mean(datSW$elevation), spei.Mar=mean(datSW$spei.Mar), spei.Aug=mean(datSW$spei.Aug))
 
-newdat$prob <- predict(dm1, newdata=newdat, type="response", re.form=NA)
+pred <- predict(desig.SWmodels[[1]], newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(desig.SWmodels[[1]], newdat))
 
-interaction.plot(newdat$habitat, newdat$desig, newdat$prob, xlab=c("Habitat"), ylab=c("Predicted Probability"), trace.label=c("Designation"))
-title("Predicted probability of presence (SW) at mean elevation and mean climate values, 50km")
+newdat2 <- data.frame(newdat, pred, pred.CI)
 
+ggplot(newdat2, aes(x=habitat,y=pred, shape=desig, linetype=desig, group=desig, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (SW) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(axis.title.x = element_text(face="bold", size=16, vjust=0.1), axis.text.x = element_text(size=12), axis.title.y = element_text(face="bold", size=16, vjust=0.9), axis.text.y = element_text(size=12, vjust=0.5), legend.text=element_text(size=14), legend.title=element_text(size=14))
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("3-level PA designation interaction plot 50km SW with error bars.jpg")
+
+
+### SE cuckoos
+newdat <- data.frame(habitat=levels(datSE$habitat), desig=rep(levels(datSE$desig), 5), elevation=mean(datSE$elevation), spei.Mar=mean(datSE$spei.Mar), spei.Aug=mean(datSE$spei.Aug))
+
+pred <- predict(desig.SEmodels[[1]], newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(desig.SEmodels[[1]], newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+ggplot(newdat2, aes(x=habitat,y=pred, shape=desig, linetype=desig, group=desig, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (SE) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(axis.title.x = element_text(face="bold", size=16, vjust=0.1), axis.text.x = element_text(size=12), axis.title.y = element_text(face="bold", size=16, vjust=0.9), axis.text.y = element_text(size=12, vjust=0.5), legend.text=element_text(size=14), legend.title=element_text(size=14))
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("3-level PA designation interaction plot 50km SE with error bars.jpg")
+
+########################################################################
+########################################################################
+########################################################################
+
+
+####===========  COUNTRY AND PRESENCE/ABSENCE IN PROTECTED AREAS ==============####
+
+#### ---- MODEL DATASET ---- ####
+
+SPA.FRA <- subset(datSW2, country=="Spain" | country=="France")
+SPA.FRA <- droplevels(SPA.FRA)
+
+bigcountries <- subset(alldata, country=="Spain" | country=="France" | country=="Germany" | country=="Italy")
+bigcountries <- droplevels(bigcountries)
+
+countrydat <- with(bigcountries, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, desig=desiglevel, country))
+
+countrymodel <- glmer(presence ~ country*PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=countrydat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+#big4countrymodel <- countrymodel
+
+summary(countrymodel)
+
+newdat <- data.frame(PA=rep(levels(countrydat$PA), each=5), country=rep(levels(countrydat$country), each=10), habitat=rep(levels(countrydat$habitat), 4), elevation=mean(countrydat$elevation), spei.Mar=mean(countrydat$spei.Mar), spei.Aug=mean(countrydat$spei.Aug))
+
+### Ben Bolker's population-level GLMM CI prediction function
+easyPredCI <- function(model,newdata,alpha=0.05) {
+  ## baseline prediction, on the linear predictor (logit) scale:
+  pred0 <- predict(model,re.form=NA,newdata=newdata)
+  ## fixed-effects model matrix for new data
+  X <- model.matrix(formula(model,fixed.only=TRUE)[-2],
+                    newdata)
+  beta <- fixef(model) ## fixed-effects coefficients
+  V <- vcov(model)     ## variance-covariance matrix of beta
+  pred.se <- sqrt(diag(X %*% V %*% t(X))) ## std errors of predictions
+  ## inverse-link (logistic) function: could also use plogis()
+  linkinv <- model@resp$family$linkinv
+  ## construct 95% Normal CIs on the link scale and
+  ##  transform back to the response (probability) scale:
+  crit <- -qnorm(alpha/2)
+  linkinv(cbind(lwr=pred0-crit*pred.se,
+                upr=pred0+crit*pred.se)) 
+}
+
+pred <- predict(countrymodel, newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(countrymodel, newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + facet_wrap( ~ country, ncol=2) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (stopovers in large countries) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
+    axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
+    axis.text.x = element_text(size=12), 
+    axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
+    axis.text.y = element_text(size=12, vjust=0.5),
+    strip.text.x = element_text(size=14, face="bold"),
+    legend.text=element_text(size=14), 
+    legend.title=element_text(size=14)
+    )
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("large countries interaction plot 50km with error bars.jpg")
+
+########################################################################
+########################################################################
+########################################################################
+
+
+####===========  STOPOVER DURATION - LONG STOPOVERS ONLY ==============####
+
+#### ---- MODEL DATASET ---- ####
+
+longstops <- subset(alldata.LOS, LOS >= 10)
+longstops <- droplevels(longstops)
+longstops$LOSlength <- "long"
+
+longstopdat <- with(longstops, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, desig=desiglevel, country))
+
+longstopdatSW <- subset(longstopdat, strat=="SW")
+longstopdatSW <- droplevels(longstopdatSW)
+
+longstopdatSE <- subset(longstopdat, strat=="SE")
+longstopdatSE <- droplevels(longstopdatSE)
+
+longstopmodelSW <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=longstopdatSW, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+longstopmodelSE <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=longstopdatSE, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+summary(longstopmodelSW)
+summary(longstopmodelSE)
+
+#### SW
+
+newdat <- data.frame(PA=rep(levels(longstopdatSW$PA), each=5), habitat=rep(levels(longstopdatSW$habitat)), elevation=mean(longstopdatSW$elevation), spei.Mar=mean(longstopdatSW$spei.Mar), spei.Aug=mean(longstopdatSW$spei.Aug))
+
+### Ben Bolker's population-level GLMM CI prediction function
+easyPredCI <- function(model,newdata,alpha=0.05) {
+  ## baseline prediction, on the linear predictor (logit) scale:
+  pred0 <- predict(model,re.form=NA,newdata=newdata)
+  ## fixed-effects model matrix for new data
+  X <- model.matrix(formula(model,fixed.only=TRUE)[-2],
+                    newdata)
+  beta <- fixef(model) ## fixed-effects coefficients
+  V <- vcov(model)     ## variance-covariance matrix of beta
+  pred.se <- sqrt(diag(X %*% V %*% t(X))) ## std errors of predictions
+  ## inverse-link (logistic) function: could also use plogis()
+  linkinv <- model@resp$family$linkinv
+  ## construct 95% Normal CIs on the link scale and
+  ##  transform back to the response (probability) scale:
+  crit <- -qnorm(alpha/2)
+  linkinv(cbind(lwr=pred0-crit*pred.se,
+                upr=pred0+crit*pred.se)) 
+}
+
+pred <- predict(longstopmodelSW, newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(longstopmodelSW, newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (LONG stopovers, SW) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
+  axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
+  axis.text.x = element_text(size=12), 
+  axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
+  axis.text.y = element_text(size=12, vjust=0.5),
+  strip.text.x = element_text(size=14, face="bold"),
+  legend.text=element_text(size=14), 
+  legend.title=element_text(size=14)
+)
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("long stopovers SW interaction plot 50km with error bars.jpg")
+
+
+#### SE
+
+newdat <- data.frame(PA=rep(levels(longstopdatSE$PA), each=5), habitat=rep(levels(longstopdatSE$habitat)), elevation=mean(longstopdatSE$elevation), spei.Mar=mean(longstopdatSE$spei.Mar), spei.Aug=mean(longstopdatSE$spei.Aug))
+
+### Ben Bolker's population-level GLMM CI prediction function
+easyPredCI <- function(model,newdata,alpha=0.05) {
+  ## baseline prediction, on the linear predictor (logit) scale:
+  pred0 <- predict(model,re.form=NA,newdata=newdata)
+  ## fixed-effects model matrix for new data
+  X <- model.matrix(formula(model,fixed.only=TRUE)[-2],
+                    newdata)
+  beta <- fixef(model) ## fixed-effects coefficients
+  V <- vcov(model)     ## variance-covariance matrix of beta
+  pred.se <- sqrt(diag(X %*% V %*% t(X))) ## std errors of predictions
+  ## inverse-link (logistic) function: could also use plogis()
+  linkinv <- model@resp$family$linkinv
+  ## construct 95% Normal CIs on the link scale and
+  ##  transform back to the response (probability) scale:
+  crit <- -qnorm(alpha/2)
+  linkinv(cbind(lwr=pred0-crit*pred.se,
+                upr=pred0+crit*pred.se)) 
+}
+
+pred <- predict(longstopmodelSE, newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(longstopmodelSE, newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (LONG stopovers, SE) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
+  axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
+  axis.text.x = element_text(size=12), 
+  axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
+  axis.text.y = element_text(size=12, vjust=0.5),
+  strip.text.x = element_text(size=14, face="bold"),
+  legend.text=element_text(size=14), 
+  legend.title=element_text(size=14)
+)
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("long stopovers SE interaction plot 50km with error bars.jpg")
+
+########################################################################
+########################################################################
+########################################################################
+
+
+####===========  STOPOVER DURATION - SHORT STOPOVERS ONLY ==============####
+
+#### ---- MODEL DATASET ---- ####
+
+shortstops <- subset(alldata.LOS, LOS < 10)
+shortstops <- droplevels(shortstops)
+shortstops$LOSlength <- "short"
+
+shortstopdat <- with(shortstops, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, desig=desiglevel, country))
+
+shortstopdatSW <- subset(shortstopdat, strat=="SW")
+shortstopdatSW <- droplevels(shortstopdatSW)
+
+shortstopdatSE <- subset(shortstopdat, strat=="SE")
+shortstopdatSE <- droplevels(shortstopdatSE)
+
+shortstopmodelSW <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=shortstopdatSW, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+shortstopmodelSE <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=shortstopdatSE, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+summary(shortstopmodelSW)
+summary(shortstopmodelSE)
+
+#### SW
+
+newdat <- data.frame(PA=rep(levels(shortstopdatSW$PA), each=5), habitat=rep(levels(shortstopdatSW$habitat)), elevation=mean(shortstopdatSW$elevation), spei.Mar=mean(shortstopdatSW$spei.Mar), spei.Aug=mean(shortstopdatSW$spei.Aug))
+
+### Ben Bolker's population-level GLMM CI prediction function
+easyPredCI <- function(model,newdata,alpha=0.05) {
+  ## baseline prediction, on the linear predictor (logit) scale:
+  pred0 <- predict(model,re.form=NA,newdata=newdata)
+  ## fixed-effects model matrix for new data
+  X <- model.matrix(formula(model,fixed.only=TRUE)[-2],
+                    newdata)
+  beta <- fixef(model) ## fixed-effects coefficients
+  V <- vcov(model)     ## variance-covariance matrix of beta
+  pred.se <- sqrt(diag(X %*% V %*% t(X))) ## std errors of predictions
+  ## inverse-link (logistic) function: could also use plogis()
+  linkinv <- model@resp$family$linkinv
+  ## construct 95% Normal CIs on the link scale and
+  ##  transform back to the response (probability) scale:
+  crit <- -qnorm(alpha/2)
+  linkinv(cbind(lwr=pred0-crit*pred.se,
+                upr=pred0+crit*pred.se)) 
+}
+
+pred <- predict(shortstopmodelSW, newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(shortstopmodelSW, newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (SHORT stopovers, SW) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
+  axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
+  axis.text.x = element_text(size=12), 
+  axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
+  axis.text.y = element_text(size=12, vjust=0.5),
+  strip.text.x = element_text(size=14, face="bold"),
+  legend.text=element_text(size=14), 
+  legend.title=element_text(size=14)
+)
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("short stopovers SW interaction plot 50km with error bars.jpg")
+
+
+#### SE
+
+newdat <- data.frame(PA=rep(levels(shortstopdatSE$PA), each=5), habitat=rep(levels(shortstopdatSE$habitat)), elevation=mean(shortstopdatSE$elevation), spei.Mar=mean(shortstopdatSE$spei.Mar), spei.Aug=mean(shortstopdatSE$spei.Aug))
+
+### Ben Bolker's population-level GLMM CI prediction function
+easyPredCI <- function(model,newdata,alpha=0.05) {
+  ## baseline prediction, on the linear predictor (logit) scale:
+  pred0 <- predict(model,re.form=NA,newdata=newdata)
+  ## fixed-effects model matrix for new data
+  X <- model.matrix(formula(model,fixed.only=TRUE)[-2],
+                    newdata)
+  beta <- fixef(model) ## fixed-effects coefficients
+  V <- vcov(model)     ## variance-covariance matrix of beta
+  pred.se <- sqrt(diag(X %*% V %*% t(X))) ## std errors of predictions
+  ## inverse-link (logistic) function: could also use plogis()
+  linkinv <- model@resp$family$linkinv
+  ## construct 95% Normal CIs on the link scale and
+  ##  transform back to the response (probability) scale:
+  crit <- -qnorm(alpha/2)
+  linkinv(cbind(lwr=pred0-crit*pred.se,
+                upr=pred0+crit*pred.se)) 
+}
+
+pred <- predict(shortstopmodelSE, newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(shortstopmodelSE, newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (SHORT stopovers, SE) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
+  axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
+  axis.text.x = element_text(size=12), 
+  axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
+  axis.text.y = element_text(size=12, vjust=0.5),
+  strip.text.x = element_text(size=14, face="bold"),
+  legend.text=element_text(size=14), 
+  legend.title=element_text(size=14)
+)
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("short stopovers SE interaction plot 50km with error bars.jpg")
+
+########################################################################
+########################################################################
+########################################################################
+
+
+####===========  LAST STOPOVERS ONLY ==============####
+
+#### ---- MODEL DATASET ---- ####
+
+finalstops <- subset(alldata, laststop=="Y")
+finalstops <- droplevels(finalstops)
+
+finalstopdat <- with(finalstops, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, desig=desiglevel, country, laststop))
+
+finalstopdatSW <- subset(finalstopdat, strat=="SW")
+finalstopdatSW <- droplevels(finalstopdatSW)
+
+finalstopdatSE <- subset(finalstopdat, strat=="SE")
+finalstopdatSE <- droplevels(finalstopdatSE)
+
+finalstopmodelSW <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=finalstopdatSW, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+finalstopmodelSE <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=finalstopdatSE, family=binomial, control=glmerControl(optimizer="bobyqa"))
+
+summary(finalstopmodelSW)
+summary(finalstopmodelSE)
+
+#### SW
+
+newdat <- data.frame(PA=rep(levels(finalstopdatSW$PA), each=5), habitat=rep(levels(finalstopdatSW$habitat)), elevation=mean(finalstopdatSW$elevation), spei.Mar=mean(finalstopdatSW$spei.Mar), spei.Aug=mean(finalstopdatSW$spei.Aug))
+
+### Ben Bolker's population-level GLMM CI prediction function
+easyPredCI <- function(model,newdata,alpha=0.05) {
+  ## baseline prediction, on the linear predictor (logit) scale:
+  pred0 <- predict(model,re.form=NA,newdata=newdata)
+  ## fixed-effects model matrix for new data
+  X <- model.matrix(formula(model,fixed.only=TRUE)[-2],
+                    newdata)
+  beta <- fixef(model) ## fixed-effects coefficients
+  V <- vcov(model)     ## variance-covariance matrix of beta
+  pred.se <- sqrt(diag(X %*% V %*% t(X))) ## std errors of predictions
+  ## inverse-link (logistic) function: could also use plogis()
+  linkinv <- model@resp$family$linkinv
+  ## construct 95% Normal CIs on the link scale and
+  ##  transform back to the response (probability) scale:
+  crit <- -qnorm(alpha/2)
+  linkinv(cbind(lwr=pred0-crit*pred.se,
+                upr=pred0+crit*pred.se)) 
+}
+
+pred <- predict(finalstopmodelSW, newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(finalstopmodelSW, newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (FINAL stopovers, SW) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
+  axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
+  axis.text.x = element_text(size=12), 
+  axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
+  axis.text.y = element_text(size=12, vjust=0.5),
+  strip.text.x = element_text(size=14, face="bold"),
+  legend.text=element_text(size=14), 
+  legend.title=element_text(size=14)
+)
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("final stopovers SW interaction plot 50km with error bars.jpg")
+
+
+#### SE
+
+newdat <- data.frame(PA=rep(levels(finalstopdatSE$PA), each=5), habitat=rep(levels(finalstopdatSE$habitat)), elevation=mean(finalstopdatSE$elevation), spei.Mar=mean(finalstopdatSE$spei.Mar), spei.Aug=mean(finalstopdatSE$spei.Aug))
+
+### Ben Bolker's population-level GLMM CI prediction function
+easyPredCI <- function(model,newdata,alpha=0.05) {
+  ## baseline prediction, on the linear predictor (logit) scale:
+  pred0 <- predict(model,re.form=NA,newdata=newdata)
+  ## fixed-effects model matrix for new data
+  X <- model.matrix(formula(model,fixed.only=TRUE)[-2],
+                    newdata)
+  beta <- fixef(model) ## fixed-effects coefficients
+  V <- vcov(model)     ## variance-covariance matrix of beta
+  pred.se <- sqrt(diag(X %*% V %*% t(X))) ## std errors of predictions
+  ## inverse-link (logistic) function: could also use plogis()
+  linkinv <- model@resp$family$linkinv
+  ## construct 95% Normal CIs on the link scale and
+  ##  transform back to the response (probability) scale:
+  crit <- -qnorm(alpha/2)
+  linkinv(cbind(lwr=pred0-crit*pred.se,
+                upr=pred0+crit*pred.se)) 
+}
+
+pred <- predict(finalstopmodelSE, newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(finalstopmodelSE, newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (FINAL stopovers, SE) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
+  axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
+  axis.text.x = element_text(size=12), 
+  axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
+  axis.text.y = element_text(size=12, vjust=0.5),
+  strip.text.x = element_text(size=14, face="bold"),
+  legend.text=element_text(size=14), 
+  legend.title=element_text(size=14)
+)
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("final stopovers SE interaction plot 50km with error bars.jpg")
