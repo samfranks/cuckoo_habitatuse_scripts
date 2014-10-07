@@ -22,7 +22,6 @@ library(chron)
 #present <- read.csv("presence data all variables points.csv", header=T)
 
 presentordered <- newpresent[order(newpresent$name, newpresent$location_date),]
-x <- as.character(presentordered$timestamp)
 x <- do.call(rbind,(strsplit(as.character(presentordered$timestamp), "  ")))
 
 dat.datetime <- chron(x[,1], x[,2], format=c(dates="y/m/d", times="h:m:s"))

@@ -8,6 +8,7 @@
 #  Samantha Franks
 #  24 May 2014
 #  11 July 2014: prepares new extracted data, including SPEI and multiple random absences
+#  Aug 2014: using points instead of polygon extracted data
 #
 ##########################################################
 
@@ -34,7 +35,7 @@ extractionwd <- c("/corine PA elevation spei extracted values points/")
 #### SET OTHER VARIABLES ####
 
 #randomradius <- c(50, 100, 200, 500)
-randomradius <- c(200)
+randomradius <- c(500)
 
 present <- FALSE
 

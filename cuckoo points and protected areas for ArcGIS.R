@@ -3,7 +3,7 @@
 #   PLOT CUCKOO STOPOVER LOCATIONS
 #
 #   Samantha Franks
-#   23 Jun 2014
+#   23 Aug 2014
 #
 ##############################################################################
 
@@ -22,7 +22,7 @@ cluster <- FALSE
 
 Mac <- FALSE
 
-randomradius <- 50
+randomradius <- 500
 
 if (!cluster) {
   

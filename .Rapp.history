@@ -1,0 +1,712 @@
+?mclust
+rm(list=ls()) #clear all previous#
+library(lattice) # plotting functions#
+library(cluster)#
+library(NCStats)#
+#############################################################
+##
+# Load and prepare data#
+##
+#############################################################
+dd<-read.csv("R/pelicans/R input files/pelican by region.csv", header=TRUE)#
+str(dd)#
+#
+known <- with(dd,data.frame(dN=d15N, dC=d13C, dD, ID, Site=Specific, Location, Region=Site, EWS))#
+###################################################################
+##
+#  Cluster analysis of feather isotope data - EM Clustering#
+##
+###################################################################
+library(mclust)#
+cluster <- known # create data frame with only necessary data - feather isotopes and site
+?mclust
+?Mclust
+classify <- with(known, data.frame(Region, dN, dC, dD))
+dd<-read.csv("R/pelicans/R input files/pelican by region.csv", header=TRUE)#
+str(dd)#
+#
+known <- with(dd,data.frame(dN=d15N, dC=d13C, dD, ID, Site=Specific, Location, Region=Site, EWS))#
+###-------------------------####
+#	Classification tree#
+###-------------------------####
+#
+classify <- with(known, data.frame(Region, dN, dC, dD))
+rm(list=ls()) #clear all previous#
+#
+library(lattice) # plotting functions#
+library(cluster)#
+library(NCStats)#
+#
+#############################################################
+##
+# Load and prepare data#
+##
+#############################################################
+dd<-read.csv("R/pelicans/R input files/pelican by region.csv", header=TRUE)#
+str(dd)#
+#
+known <- with(dd,data.frame(dN=d15N, dC=d13C, dD, ID, Site=Specific, Location, Region=Site, EWS))#
+###-------------------------####
+#	Classification tree#
+###-------------------------####
+#
+classify <- with(known, data.frame(Region, dN, dC, dD))
+classify <- with(known, data.frame(Region, dN, dC, dD))#
+#
+m1 <- tree(Region ~ ., classify)#
+#
+plot(m1)#
+text(m1)
+library(tree)
+classify <- with(known, data.frame(Region, dN, dC, dD))#
+#
+m1 <- tree(Region ~ ., classify)#
+#
+plot(m1)#
+text(m1)
+plot(m1)
+classify <- with(known, data.frame(Region, dN, dC, dD))#
+#
+m1 <- tree(Region ~ ., classify)#
+#
+plot(m1)#
+text(m1)
+summary(m1)
+54/201
+partition.tree(m1)
+m2 <- tree(Region ~ dD, classify)
+partition.tree(m1)
+partition.tree(m2)
+classify <- with(known, data.frame(Region, dN, dC, dD))#
+#
+m1 <- tree(Region ~ ., classify)#
+#
+plot(m1)#
+text(m1)#
+#
+m2 <- tree(Region ~ dD, classify)#
+partition.tree(m2)
+m2 <- tree(Region ~ dD + dC, classify)
+partition.tree(m2)
+classify <- with(known, data.frame(Region, dN, dC, dD))#
+#
+m1 <- tree(Region ~ ., classify)#
+#
+plot(m1)#
+text(m1)
+kmd <- read.table(kmeansdata)
+?kmeans
+m2 <- kmeans(cluster[,1:3)], 2)
+m2 <- kmeans(cluster[,1:3], 2)
+head(cluster)
+m2 <- kmeans(dat[,1:3], 2)
+dat <- known
+m2 <- kmeans(dat[,1:3], 2)
+plot(m2)
+m2[[1]]
+m1 <- kmeans(dat[,1:3], 2)
+with(dat, plot(dC, dN, col = m1[[1]]))
+?with
+with(dat, {#
+	m1 <- kmeans(dC, dN, 2)#
+	m2 <- kmeans(dC, dD, 2)#
+})
+m2 <- kmeans(dC, dD, 2)
+m2 <- with(dat, kmeans(dC, dD, 2))
+m2 <- with(dat, kmeans(dC, dD, 3))
+m2 <- kmeans(dat[,c("dC","dD")], 2)
+?kmeans
+class(m2)
+m2
+modellist <- list()
+modellist
+modellist[[1]] <- m2
+modellist[[1]]
+m1 <- kmeans(dat[,c("dC","dN")], 2)#
+	m2 <- kmeans(dat[,c("dC","dD")], 2)#
+	m3 <- kmeans(dat[,c("dN","dD")], 2)
+m1 <- kmeans(dat[,c("dC","dN")], 2)#
+	m2 <- kmeans(dat[,c("dC","dD")], 2)#
+	m3 <- kmeans(dat[,c("dN","dD")], 2)	#
+par(mfrow=c(2,2))#
+with(dat, {#
+	plot(dC, dN, col = m1)#
+	plot(dC, dD, col = m2)#
+	plot(dN, dD, col = m3)#
+}#
+#
+)
+warnings()
+m1 <- kmeans(dat[,c("dC","dN")], 2)#
+	m2 <- kmeans(dat[,c("dC","dD")], 2)#
+	m3 <- kmeans(dat[,c("dN","dD")], 2)	#
+par(mfrow=c(2,2))#
+with(dat, {#
+	plot(dC, dN, col = m1[[1]])#
+	plot(dC, dD, col = m2[[1]])#
+	plot(dN, dD, col = m3[[1]])#
+}#
+#
+)
+for (i in 2:5) {#
+#
+m1 <- kmeans(dat[,c("dC","dN")], i)#
+m2 <- kmeans(dat[,c("dC","dD")], i)#
+m3 <- kmeans(dat[,c("dN","dD")], i)	#
+par(mfrow=c(3,4))#
+with(dat, {#
+	plot(dC, dN, col = m1[[1]], pch = 16)#
+	plot(dC, dD, col = m2[[1]], pch = 16)#
+	plot(dN, dD, col = m3[[1]], pch = 16)#
+}#
+)#
+}
+modellist <- list()
+par(mfrow=c(3,4))#
+#
+for (i in 2:5) {#
+#
+m1 <- kmeans(dat[,c("dC","dN")], i)#
+m2 <- kmeans(dat[,c("dC","dD")], i)#
+m3 <- kmeans(dat[,c("dN","dD")], i)	#
+with(dat, {#
+	plot(dC, dN, col = m1[[1]], pch = 16)#
+	plot(dC, dD, col = m2[[1]], pch = 16)#
+	plot(dN, dD, col = m3[[1]], pch = 16)#
+}#
+)
+par(mfrow=c(3,4))
+for (i in 2:5) {#
+#
+m1 <- kmeans(dat[,c("dC","dN")], i)#
+m2 <- kmeans(dat[,c("dC","dD")], i)#
+m3 <- kmeans(dat[,c("dN","dD")], i)	#
+with(dat, {#
+	plot(dC, dN, col = m1[[1]], pch = 16)#
+	plot(dC, dD, col = m2[[1]], pch = 16)#
+	plot(dN, dD, col = m3[[1]], pch = 16)#
+}#
+)#
+}
+)
+par(mfrow=c(3,4))#
+#
+for (i in 2:5) {#
+#
+m1 <- kmeans(dat[,c("dC","dN")], i)#
+m2 <- kmeans(dat[,c("dC","dD")], i)#
+m3 <- kmeans(dat[,c("dN","dD")], i)	#
+with(dat, {#
+	plot(dC, dN, col = m1[[1]], pch = 16)#
+	plot(dC, dD, col = m2[[1]], pch = 16)#
+	plot(dN, dD, col = m3[[1]], pch = 16)#
+}#
+)#
+}
+par(mfrow=c(4,3))#
+#
+for (i in 2:5) {#
+#
+m1 <- kmeans(dat[,c("dC","dN")], i)#
+m2 <- kmeans(dat[,c("dC","dD")], i)#
+m3 <- kmeans(dat[,c("dN","dD")], i)	#
+with(dat, {#
+	plot(dC, dN, col = m1[[1]], pch = 16)#
+	plot(dC, dD, col = m2[[1]], pch = 16)#
+	plot(dN, dD, col = m3[[1]], pch = 16)#
+}#
+)#
+}
+par(mfrow=c(4,3))#
+#
+for (i in 3:6) {#
+#
+m1 <- kmeans(dat[,c("dC","dN")], i)#
+m2 <- kmeans(dat[,c("dC","dD")], i)#
+m3 <- kmeans(dat[,c("dN","dD")], i)	#
+with(dat, {#
+	plot(dC, dN, col = m1[[1]], pch = 16)#
+	plot(dC, dD, col = m2[[1]], pch = 16)#
+	plot(dN, dD, col = m3[[1]], pch = 16)#
+}#
+)#
+}
+par(mfrow=c(4,3))#
+#
+for (i in 4:7) {#
+#
+m1 <- kmeans(dat[,c("dC","dN")], i)#
+m2 <- kmeans(dat[,c("dC","dD")], i)#
+m3 <- kmeans(dat[,c("dN","dD")], i)	#
+with(dat, {#
+	plot(dC, dN, col = m1[[1]], pch = 16)#
+	plot(dC, dD, col = m2[[1]], pch = 16)#
+	plot(dN, dD, col = m3[[1]], pch = 16)#
+}#
+)#
+}
+m4 <- kmeans(dat[,1:3], 5)
+m4[[1]]
+table(m4[[1]], dat$Region)
+m4 <- kmeans(dat[,1:3], 4)#
+#
+m4[[1]]#
+#
+table(m4[[1]], dat$Region)
+m4 <- kmeans(dat[,1:3], 2)#
+#
+table(m4[[1]], dat$Region)
+m4 <- kmeans(dat[,1:3], 5)#
+#
+table(m4[[1]], dat$Region)
+m4 <- kmeans(dat[,1:2], 5)#
+#
+table(m4[[1]], dat$Region)
+m4 <- kmeans(dat[,1:3], 5)#
+#
+table(m4[[1]], dat$Region)
+head(dat)
+m4 <- kmeans(dat[,2:3], 5)#
+#
+table(m4[[1]], dat$Region)
+wss <- (nrow(dat[,1:3])-1)*sum(apply(dat[,1:3],2,var))#
+#
+for (i in 2:15)#
+	wss[i] <- sum(kmeans(dat[,1:3], centers=i)$withinss)#
+#
+plot(1:15, wss, type="b", xlab="Number of Clusters", ylab="Within groups sum of squares")
+?Mclust
+result <- kmeans(cluster[,1:3], 5) # 5 cluster solution#
+names(result)#
+result$centers
+result <- kmeans(dat[,1:3], 5) # 5 cluster solution
+names(result)
+result$centers
+table(results[[1]], dat$Region)
+table(result[[1]], dat$Region)
+result$cluster
+result
+result$size
+newdat <- data.frame(dat, result$cluster)	# append cluster groups to original data
+str(newdat)
+newdat$kmeans.group <- as.factor(newdat$kmeans.group)
+newdat <- data.frame(dat, kmeans.group = result$cluster)	# append cluster groups to original data#
+newdat$kmeans.group <- as.factor(newdat$kmeans.group
+)
+aggregate(dat[,1:3],by=list(result$cluster),FUN=mean)
+result$centers
+class(result$centers)
+fit <- Mclust(known[,1:3])
+m1 <- Mclust(known[,1:3])
+plot(m1, cluster[,1:3]) # plot results
+m1 <- Mclust(dat[,1:3])
+m1
+print(m1)
+m1 <- Mclust(dat[,1:3])
+m1
+print(m1)
+names(fit)
+head(dat)
+?Mclust
+library(mclust)#
+cluster <- known # create data frame with only necessary data - feather isotopes and site#
+fit <- Mclust(cluster[,1:3])
+fit
+plot(fit, cluster[,1:3]) # plot results #
+print(fit) # display the best model#
+names(fit)#
+fit$z
+library(mclust)#
+cluster <- known # create data frame with only necessary data - feather isotopes and site#
+fit <- Mclust(cluster[,1:3])#
+plot(fit, cluster[,1:3]) # plot results
+m1 <- Mclust(dat[,1:3])#
+plot(m1, dat[,1:3]) # plot results
+print(m1)
+names(fit)
+fit$z
+m1 <- Mclust(dat[,1:3])#
+plot(m1, dat[,1:3]) # plot results #
+print(m1) # displays the best model: for pelican data, indicates 3 groups#
+names(m1)	# shows what values you can extract from the EM model#
+m1$z
+names(m1)
+m1$modelName
+1m
+m1
+m1$n
+m1$d
+m1$G
+?Mclust
+m1$classification
+m1 <- Mclust(dat[,1:2])
+1m
+m1
+m1 <- Mclust(dat[,1:3])
+m1
+summary(m1$classification)
+summary(as.factor(m1$classification))
+m1 <- Mclust(dat[,2:3])
+summary(as.factor(m1$classification))	# shows the number of observations in each group
+?hclust
+d <- dist(dat[,1:3], method = "euclidean") # calculates a Euclidean distance matrix using isotope data#
+#
+m1 <- hclust(d, method="ward")  # can specify different agglomeration methods#
+plot(m1, cex=0.5)
+plot(m1, cex=0.5, labels = dat$Region)
+groups.3 = cutree(m1,3)
+groups.3
+table(groups.3)
+counts <- sapply(3:6,function(ncl)table(cutree(m1,ncl)))#
+names(counts) <- 3:6#
+counts
+groups.3 <- cutree(m1,4)
+table(groups.3)
+plot(m1, cex=0.5, labels = dat$Region)		# you can change the labels at the tips of the tree by changing the label variable name
+groups.3[[1]]
+dat$Region[groups.3==1]
+class(groups.3)
+sapply(unique(groups),function(g)dat$Region[groups == g])
+groups <- cutree(m1,3)	# change to 4 for 4 group solution
+sapply(unique(groups),function(g)dat$Region[groups == g])
+sapply(unique(groups),function(g)dat$Specific[groups == g])
+names(dat)
+head(daT)
+head(dat)
+sapply(unique(groups),function(g)dat$Location[groups == g])
+counts <- sapply(3:6,function(ncl)table(cutree(m1,ncl)))#
+names(counts) <- 3:6#
+counts
+# cut the tree at the number of groups you want to define (probably either 3 or 4 for pelicans)#
+groups <- cutree(m1,4)	# change to 4 for 4 group solution#
+table(groups)#
+#
+# see how many observations fall into each group for 3-6 group solution#
+counts <- sapply(3:6,function(ncl)table(cutree(m1,ncl)))#
+names(counts) <- 3:6#
+counts#
+#
+# see which observations from which regions (or sites) fall into which group#
+sapply(unique(groups),function(g)dat$Location[groups == g])#
+### most "West" birds fall into
+# cut the tree at the number of groups you want to define (probably either 3 or 4 for pelicans)#
+groups <- cutree(m1,3)	# change to 4 for 4 group solution#
+table(groups)#
+#
+# see how many observations fall into each group for 3-6 group solution#
+counts <- sapply(3:6,function(ncl)table(cutree(m1,ncl)))#
+names(counts) <- 3:6#
+counts#
+#
+# see which observations from which regions (or sites) fall into which group#
+sapply(unique(groups),function(g)dat$Location[groups == g])
+# cut the tree at the number of groups you want to define (probably either 3 or 4 for pelicans)#
+groups <- cutree(m1,5)	# change to 4 for 4 group solution#
+table(groups)#
+#
+# see how many observations fall into each group for 3-6 group solution#
+counts <- sapply(3:6,function(ncl)table(cutree(m1,ncl)))#
+names(counts) <- 3:6#
+counts#
+#
+# see which observations from which regions (or sites) fall into which group#
+sapply(unique(groups),function(g)dat$Location[groups == g])
+### RESULTS of dendrogram ####
+# initial inspection shows definitely 3, maybe 4 distinct groups#
+# the longer the height of the branch, the greater the separation of the data#
+#
+# cut the tree at the number of groups you want to define (probably either 3 or 4 for pelicans)#
+groups <- cutree(m1,4)	# change to 4 for 4 group solution#
+table(groups)#
+#
+# see how many observations fall into each group for 3-6 group solution#
+counts <- sapply(3:6,function(ncl)table(cutree(m1,ncl)))#
+names(counts) <- 3:6#
+counts#
+#
+# see which observations from which regions (or sites) fall into which group#
+sapply(unique(groups),function(g)dat$Location[groups == g])
+table(groups, dat$Location)
+# cut the tree at the number of groups you want to define (probably either 3 or 4 for pelicans)#
+groups <- cutree(m1,3)	# change to 4 for 4 group solution#
+table(groups)#
+#
+# see how many observations fall into each group for 3-6 group solution#
+counts <- sapply(3:6,function(ncl)table(cutree(m1,ncl)))#
+names(counts) <- 3:6#
+counts#
+#
+# see which observations from which regions (or sites) fall into which group#
+sapply(unique(groups),function(g)dat$Location[groups == g])#
+#
+# see how many observations from pre-defined regions fall into groups identified by the data#
+table(groups, dat$Location)
+aggregate(dat,list(groups),median)
+aggregate(dat.use,list(groups),median)
+aggregate(dat[,1:3],list(groups),median)
+aggregate(dat[,1:3],list(groups),mean)
+plot(m1, cex=0.5, labels = dat$Location)		# you can change the labels at the tips of the tree by changing the label variable name
+library(tree)#
+#
+classify <- with(known, data.frame(Region, dN, dC, dD))#
+#
+m1 <- tree(Region ~ ., classify)#
+#
+plot(m1)#
+text(m1)
+rm(list=ls()) #clear all previous#
+#
+library(lattice) # plotting functions#
+library(NCStats)#
+#library(faraway)#
+#library(nlme)#
+#library(lme4)#
+#library(MuMIn)#
+library(AICcmodavg)#
+#
+#------------------------------------------------------------#
+# AIC function#
+#------------------------------------------------------------#
+#
+# a function to produce relevant calculations for an AIC table that is used in conjunction with a list containing the model names#
+calculate.AIC.2<-function(aictable,modellist) {#
+modelnames<-modellist#
+delta.aic<-aictable$AIC.c-min(aictable$AIC.c)#
+lik.aic<-exp(-delta.aic/2)#
+aic.w<-lik.aic/(sum(lik.aic))#
+aic.table<-data.frame(modelnames,AIC.table,delta.aic,lik.aic,aic.w)#
+print(aic.table)#
+}#
+#------------------------------------------#
+# Load data#
+#------------------------------------------#
+#
+dd<-read.csv("R/sandpiper/merged breeding nest banding isotope assignment data 2008-10_20131023.csv", header=TRUE)#
+str(dd)#
+#
+# remove records with no isotope data (NAs)#
+t1 <- Subset(dd, Origin != "NA")#
+#
+# remove records with no initiation dates (NAs)#
+t2 <- Subset(t1, INIT.JULIAN != "NA")#
+#
+# remove duplicate records#
+t3<-unique(t2)#
+#
+# adults only#
+complete<-Subset(t3,Revised.Age=="ASY")#
+str(complete)#
+colnames(complete) <- c("Site", "Year", names(complete)[3:22])#
+#
+# write datafile of complete records#
+#
+# write.csv(complete,"R/sandpiper/merged breeding nest banding and isotope data_complete records_20131024.csv",row.names=F)#
+#
+# identification of unknowns - changed in all master data sheets to females#
+# 2008_228156951 is female based on pair dynamics (other bird is definitely male)#
+# 2010_140165960 is female based on culmen (mistakenly coded as U)#
+# 2010_140165965 is female based on other morphometrics besides culmen (very large wing and tarsus!)#
+# known<-Subset(complete,Sex!="U") # subset out males and females#
+#
+# set Year as a factor#
+complete$Year<-factor(complete$Year)	#
+#
+# sample size by SITE and YEAR#
+n <- table(complete$Site, complete$Year)#
+n
+str(t1)
+summary(t1$Site)
+t1[t1$Site=="Wales",]
+n
+?combn
+combn(letters[1:4], 2)#
+(m <- combn(10, 5, min))   # minimum value in each combination#
+mm <- combn(15, 6, function(x) matrix(x, 2, 3))
+mm
+ModelList<-list()#
+for (m in 1:3) ModelList <- c(ModelList,combn(c("EXP_WAVG", "PERC_ROCK", "HTLT_WAVG"), m, simplify=FALSE))  # Note that if you are only evaluating one expression, no { } are required.#
+# View the list we just created.#
+ModelList
+ModelList[[7]][1]
+ModelList<-list()
+for (m in 1:3) ModelList <- c(ModelList,combn(c("a","b","c","d","e"), m, simplify=FALSE))  # Note that if you are only evaluating one expression, no { } are required.
+for (m in 1:5) ModelList <- c(ModelList,combn(c("a","b","c","d","e"), m, simplify=FALSE))  # Note that if you are only evaluating one expression, no { } are required.
+ModelList
+formulaname <- character()
+?cat
+cat(paste(letters, 100* 1:26), fill = TRUE, labels = paste0("{", 1:10, "}:"))
+iter <- stats::rpois(1, lambda = 10)#
+## print an informative message#
+cat("iteration = ", iter <- iter + 1, "\n")
+i<-1
+paste(ModelList[[i]],collapse="")
+paste(ModelList[[56]],collapse="")
+paste(ModelList[[56]], sep="*", collapse="")
+?paste
+paste(ModelList[[56]], collapse="*")
+formulaname <- character()#
+#
+for (i in 1:length(ModelList)){#
+	formulaname[i] <- paste(ModelList[[i]], collapse="*")#
+#
+}
+tail(formulaname)
+getwd()
+modellist <- list()  # set up blank list to hold model formulas
+modellist <- list()  # set up blank list to hold model formulas#
+#
+for (i in 1:length(formulaname)){#
+	modellist[[i]] <- formula(Response ~ formulaname[i])#
+}
+modellist[[56]]
+?formula
+for (i in 1:length(formulaname)){#
+	modellist[[i]] <- as.formula(Response ~ formulaname[i])#
+}
+modellist
+formulaname[56]
+i<-56
+modellist[[i]] <- as.formula(paste("Response ~ ", paste(formulaname[i])))
+modellist[[i]]
+for (i in 1:length(formulaname)){#
+	modellist[[i]] <- as.formula(paste("Response ~ ", paste(formulaname[i])))#
+}
+modellist
+ls()
+Mac
+m1
+m2
+library(plyr)#
+library(reshape)#
+#library(glmmML)#
+library(lme4)#
+#library(AICcmodavg)#
+library(arm)
+load("/Volumes/SAM250GB/BTO PC Documents/Git/cuckoos/SE 50km models 20140821.RData")
+ls()
+levels(fulldat$name)
+rm(list=ls())
+.Platform
+.Platform$OS
+?substr
+?substr
+randomradius <- 050
+randomradius
+Args <- c("SW050")
+Args
+route <- substr(Args[3],1,2)	# SW/SE
+randomradius <- substr(Args[3],3,5) # 50, 100, 200, or 500km
+route
+Args <- c("platform info", "vanilla", "SW050")
+Args
+route <- substr(Args[3],1,2)	# SW/SE
+randomradius <- substr(Args[3],3,5) # 50, 100, 200, or 500km
+route
+randomradius
+randomradius <- as.numeric(substr(Args[3],3,5)) # 50, 100, 200, or 500km
+randomradius
+if (cluster) {#
+  library(plyr)#
+  library(reshape)#
+  #library(glmmML)#
+  library(lme4)#
+  #library(AICcmodavg)#
+  library(arm)#
+}#
+if (!cluster) {#
+  library(plyr)#
+  library(reshape)#
+  #library(glmmML)#
+  library(lme4)#
+  #library(AICcmodavg)#
+  library(arm)#
+  library(ggplot2)#
+  library(scales)#
+  library(sp)#
+  library(rgeos)#
+  library(rgdal)#
+}#
+###----------------------------------------------####
+####         SET WORKING DIRECTORIES		#####
+###----------------------------------------------####
+Mac <- TRUE#
+if (!cluster) {#
+  if (!Mac) parentwd <- c("C:/Users/samf/Documents/Git/cuckoos")#
+  if (Mac) parentwd <- c("/Volumes/SAM250GB/BTO PC Documents/Git/cuckoos")#
+}#
+if (cluster) parentwd <- c("/users1/samf/cuckoos")#
+datawd <- paste(parentwd, "/data", sep="")#
+outputwd <- paste(parentwd, "/output", sep="")
+cluster <- FALSE
+if (cluster) {#
+  library(plyr)#
+  library(reshape)#
+  #library(glmmML)#
+  library(lme4)#
+  #library(AICcmodavg)#
+  library(arm)#
+}#
+if (!cluster) {#
+  library(plyr)#
+  library(reshape)#
+  #library(glmmML)#
+  library(lme4)#
+  #library(AICcmodavg)#
+  library(arm)#
+  library(ggplot2)#
+  library(scales)#
+  library(sp)#
+  library(rgeos)#
+  library(rgdal)#
+}#
+###----------------------------------------------####
+####         SET WORKING DIRECTORIES		#####
+###----------------------------------------------####
+Mac <- TRUE#
+if (!cluster) {#
+  if (!Mac) parentwd <- c("C:/Users/samf/Documents/Git/cuckoos")#
+  if (Mac) parentwd <- c("/Volumes/SAM250GB/BTO PC Documents/Git/cuckoos")#
+}#
+if (cluster) parentwd <- c("/users1/samf/cuckoos")#
+datawd <- paste(parentwd, "/data", sep="")#
+outputwd <- paste(parentwd, "/output", sep="")
+randomradius <- 200
+setwd(paste(datawd, "/data for analysis/", sep=""))#
+present <- read.csv("presence data all variables points all with country data.csv", header=T)#
+absent <- read.csv(paste("absence data all variables points all with country data ", randomradius, " km.csv", sep=""), header=T)#
+### without at sea country data and correct country points for absences#
+# setwd(paste(datawd, "/data for analysis/", sep=""))#
+# present2 <- read.csv("presence data all variables points.csv", header=T)#
+# absent2 <- read.csv(paste("absence data all variables points ", randomradius, " km.csv", sep=""), header=T)#
+# present <- rename(present, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))#
+# #
+# absent <- rename(absent, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
+route
+#### ---- CHOOSE LANDSCALE SCALE FOR RANDOM DATASET ---- #####
+newpresent <- rename(present, c("newlongs.epsg3035"="long.epsg3035", "newlats.epsg3035"="lat.epsg3035", "newlongs.epsg4326"="long.epsg4326", "newlats.epsg4326"="lat.epsg4326"))#
+newabsent <- rename(absent, c("randomlong.epsg3035"="long.epsg3035", "randomlat.epsg3035"="lat.epsg3035", "randomlong.epsg4326"="long.epsg4326", "randomlat.epsg4326"="lat.epsg4326"))#
+#### ADD STOPOVER DURATION TO DATA #####
+### creates 2 files: present.LOS and absent.LOS with length of stay data added onto present and absent datasets#
+setwd(paste(parentwd, "/scripts/", sep=""))#
+source("source code to add stopover duration data for analysis.R")#
+############# subset out only one round of absences#
+#newabsent <- subset(newabsent, nabsence==1)#
+newabsent <- newabsent[,-which(names(newabsent) %in% c("nabsence","random.scale"))]#
+absent.LOS <- absent.LOS[,-which(names(absent.LOS) %in% c("nabsence","random.scale"))]#
+present.LOS <- present.LOS[,-which(names(present.LOS) %in% c("datetime"))]#
+present.LOS <- present.LOS[c(2,1,3:length(present.LOS))]#
+alldata <- rbind(newpresent, newabsent)#
+alldata.LOS <- rbind(present.LOS, absent.LOS)
+head(alldata.LOS)
+fulldat <- with(alldata.LOS, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, usecountry))
+dat.route <- subset(fulldat, strat==route)
+str(fulldat)
+fulldat <- with(alldata.LOS, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, country=usecountry))
+dat.route <- subset(fulldat, strat==route)
+str(dat.route)
+dat.route <- droplevels(dat.route)
+str(dat.route)
+levels(dat.route$country)
+dat <- subset(fulldat, strat==route)
+dat <- droplevels(dat)
+?save

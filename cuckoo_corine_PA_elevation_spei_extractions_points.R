@@ -58,7 +58,7 @@ cluster <- FALSE
 #### TO RUN RANDOM MCPs, CHANGE BELOW LINE ####
 generaterandom <- TRUE
 #randomradius <- c(50000, 100000, 200000, 500000) # change to desired search radius for randomized pseudoabsence polygon, in metres
-randomradius <- c(200000) # change to desired search radius for randomized pseudoabsence polygon, in metres
+randomradius <- c(500000) # change to desired search radius for randomized pseudoabsence polygon, in metres
 
 #### TO CHANGE NUMBER OF PSEUDO-ABSENCES GENERATED, CHANGE BELOW LINE ####
 n.absences <- 10

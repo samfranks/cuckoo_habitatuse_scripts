@@ -1,107 +1,48 @@
 ##########################################################
 #
-#   CUCKOO ANALYSES: 1) OCCUPANCY MODEL, 2) SUCCESS/FAILURE DIFFERENCES
+#   CUCKOO HABITAT USE: DATA EXPLORATION & VISUALIZATION
 #
 #  Samantha Franks
 #  11 April 2014
 #  24 May 2014
 #  17 Jul 2014: new random polygons generating 10 pseudoabsences/presence
 #  5 Aug 2014: analysis using randomly generated points instead of polygons for absences, still 10 absent stopovers per presence
+#  9 Sep 2014: using correct country data for absences, and filling in "at sea" points for presences
 #
 ##########################################################
 
-######## NOTES ON ANALYSIS ########
-
-###--- ANALYSIS 1 - OCCUPANCY MODEL ---###
-
-### DO HABITAT, SIZE OF PROTECTED AREA, LEVEL OF PROTECTED AREA PROTECTION, CLIMATE, AND ELEVATION PREDICT CUCKOO PRESENCE/ABSENCE?
-
-### MODEL STRUCTURE ###
-
-# logistic regression, sampling unit = points, nested random effects of individual(stopover(pointid))
-
-# presence/absence (sampling unit = the stopover MCP) ~
-#     HABITAT (5 land cover categories)
-#     PROTECTED AREA (Y/N)
-#     LEVEL OF PROTECTION (national or international)
-#     ELEVATION
-#     WINTER CLIMATE
-#     SPRING CLIMATE
-#     MIGRATION STRATEGY (E/W)
-
-#### REVISED ANALYSIS 5 AUG 2014 - sampling unit = individual simulated points ####
-# 
-# A. PSEUDOREPLICATION
-#
-# Using points instead of stopover polygons introduces pseudoreplication at various levels:
-#   
-# 1) number of points in a stopover: stopovers with long duration and/or lots of points will introduce spatial bias by oversampling certain areas
-# - control by including mgroup as a nested random effect within individual
-# - length of stopover may in fact be due to the presence or quality of particular habitat
-# 
-# 2) resampled points: points simulated by incorporating location error are spatially autocorrelated
-# - control by including point id as a nested random effect within mgroup
-# 
-#
-# **B. WEIGHT OBSERVATIONS IN MODEL ACCORDING TO LOCATION UNCERTAINTY - Rob Rob thinks this is unnecessary because we've already accounted for the error in the simulation bootstrap - also, you can't do this in R (weights argument is when you need to indicate the number of trials that leads to proportional response data) but apparently you can in SAS
-# - weight = 1/area of the error ellipse of a point
-#
-#
-# C. HABITAT VARIABLES ARE CATEGORICAL
-# - dummy variables created for 5 different habitat categories
-#
-#
-# D. SPEI CLIMATE VARIABLES
-# - 6-month SPEI values are calculated based on the current month's plus 5 previous months data
-# - this timescale should provide a good representation of vegetation growing conditions over time periods likely to be relevant for determining the quality of habitats that cuckoos use
-# - SPEI-month values to use will be March and August
-# - SPEI-Mar represents the conditions over the winter (Oct-Mar period), which is of greatest relevance in the Mediterranean where winter rainfall is most important for vegetation growth
-# - SPEI-Aug represents the conditions over the spring and summer (Mar-Aug period), which is of greater relevance in the more northern parts of Europe where rainfall early in the growing season sets the conditions for vegetation growth
-# - from Vicente-Serrano et al. (2012 PNAS) a 6 month SPEI may be the best trade-off in using a timescale that will be relatively well correlated with vegetation activity (as measured by NDVI and other indices)
-#
-#
-# D. MODEL VARIABLES & CANDIDATE MODEL SET
-# - Response = presence/absence
-# - Protected area (categorical): does point fall in a protected area, Y/N
-# - Winter climate (continuous): SPEI 6-month SPEI in March, which summarizes the relative precipitation/evapotranspiration that has occurred over the last 6 months (Oct-Mar) compared to the norm (standardized against the background 30 year dataset)
-# - spring climate (continuous): sPEI 6-month SPEI in August, which summarizes the relative precipitation/evapotranspiration that has occurred over the last 6 months (Mar-Aug) compared to the norm (standardized against the background 30 year dataset)
-# - elevation
-
-###--- ANALYSIS 2 - SUCCESS OF SAHARA CROSSING MODEL ---###
-
-### DO HABITAT, SIZE OF PROTECTED AREA, LEVEL OF PROTECTED AREA PROTECTION, CLIMATE, AND ELEVATION OF THE *FINAL EUROPEAN STOPOVER* PREDICT SUCCESS/FAILURE OF SAHARA CROSSING?
-
-# logistic regression, with individual as a random effect
-
-# success/failure (sampling unit = the final stopover MCP) ~
-#     HABITAT (proportion of 6 land cover categories)
-#     AREA PROTECTED AREA (amount of stopover MCP that is PA, by proportion or absolute area in km2)
-#     LEVEL OF PROTECTION (national or international)
-#     ELEVATION
-#     WINTER RAINFALL (average local rainfall for grid cell Nov-Feb)
-#     WINTER TEMP (average local temp for grid cell Nov-Feb)
-#     SPRING RAINFALL (average local rainfall for grid cell Mar-Jun)
-#     SPRING TEMP (average local temp for grid cell Mar-Jun)
-#     MIGRATION STRATEGY (E/W)
-#     random effect of stopover? or individual? or stopover nested within individual?
-
-
-library(plyr)
-library(reshape)
-#library(glmmML)
-library(lme4)
-#library(AICcmodavg)
-library(arm)
-library(ggplot2)
-
-###----------------------------------------------###
-####         SET WORKING DIRECTORIES		####
-###----------------------------------------------###
-
-
-points <- TRUE
-
 cluster <- FALSE
+
+if (cluster) {
+  library(plyr)
+  library(reshape)
+  #library(glmmML)
+  library(lme4)
+  #library(AICcmodavg)
+  library(arm)
+}
+
+if (!cluster) {
+  library(plyr)
+  library(reshape)
+  #library(glmmML)
+  library(lme4)
+  #library(AICcmodavg)
+  library(arm)
+  library(ggplot2)
+  library(grid)
+  library(scales)
+  library(sp)
+  library(rgeos)
+  library(rgdal)
+}
+
+
+
+###----------------------------------------------###
+####         SET WORKING DIRECTORIES  	####
+###----------------------------------------------###
+
 
 Mac <- FALSE
 
@@ -114,345 +55,450 @@ if (!cluster) {
   
 }
 
-  
+
 if (cluster) parentwd <- c("/users1/samf/cuckoos")
 
 datawd <- paste(parentwd, "/data", sep="")
 outputwd <- paste(parentwd, "/output", sep="")
 
-#extractionwd <- c("/corine PA elevation spei extracted values/")
-
-
-####################################################
-#
-####   SIMPLE ANALYSIS EXPLORATIONS - PLOTS		####
-#
-####################################################
 
 ####==== IMPORT POINT DATA ====####
 
-if (points) {
-  
 setwd(paste(datawd, "/data for analysis/", sep=""))
-present <- read.csv("presence data all variables points.csv", header=T)
-absent <- read.csv(paste("absence data all variables points ", randomradius, " km.csv", sep=""), header=T)
-
-present <- rename(present, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
-
-absent <- rename(absent, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
-
-newpresent <- rename(present, c("newlongs.epsg3035"="long.epsg3035", "newlats.epsg3035"="lat.epsg3035", "newlongs.epsg4326"="long.epsg4326", "newlats.epsg4326"="lat.epsg4326"))
-newabsent <- rename(absent, c("randomlong.epsg3035"="long.epsg3035", "randomlat.epsg3035"="lat.epsg3035", "randomlong.epsg4326"="long.epsg4326", "randomlat.epsg4326"="lat.epsg4326"))
+present <- read.csv("presence data all variables points all with country data.csv", header=T)
+absent <- read.csv(paste("absence data all variables points all with country data ", randomradius, " km.csv", sep=""), header=T)
 
 
-newabsent <- newabsent[,-which(names(newabsent) %in% c("nabsence","random.scale"))]
+### these data are without at sea country data and also use the incorrect country points for absences
 
-alldata <- rbind(newpresent, newabsent)
+# setwd(paste(datawd, "/data for analysis/", sep=""))
+# present2 <- read.csv("presence data all variables points.csv", header=T)
+# absent2 <- read.csv(paste("absence data all variables points ", randomradius, " km.csv", sep=""), header=T)
 
-}
+# present <- rename(present, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
+# 
+# absent <- rename(absent, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
 
-
-####==== IMPORT POLYGON DATA ====####
-
-if (!points) {
-  
-  setwd(paste(datawd, "/data for analysis/", sep=""))
-  present <- read.csv("presence data all variables.csv", header=T)
-  absent <- read.csv("absence data all variables.csv", header=T)
-  
-  # # combining habitats artificial, bareland, water into "unsuitable" category
-  # unsuitable <- rowSums(present[,c("artificial","bare_land","wetland_water")])
-  # present.new <- data.frame(present[,1:12],unsuitable,present[,13:23])
-  # present.new <- present.new[,-(c(8,9,12))]
-  
-  # unsuitable <- rowSums(absent[,c("artificial","bare_land","wetland_water")])
-  # absent.new <- data.frame(absent[,1:12],unsuitable,absent[,13:24])
-  # absent.new <- absent.new[,-(c(8,9,12))]
-  
-  # absentsplit <- split(absent, as.factor(absent$random.scale))
-  # 
-  
-  habitatvarnames <- c("agriculture","forest","scrub.grassland","unsuitable","wetland.water")
-  
-}
 
 
 ###-----------------------------------------------------###
 ####   HABITAT USE - plot habitat types used vs random ####
 ###-----------------------------------------------------###
 
-####=========== HABITAT USE: POINTS ============####
+### ----------------------------- ###
+####        DATA PREPARATION     ####
+### ------------------------------###
 
-if (points) {
+newpresent <- rename(present, c("newlongs.epsg3035"="long.epsg3035", "newlats.epsg3035"="lat.epsg3035", "newlongs.epsg4326"="long.epsg4326", "newlats.epsg4326"="lat.epsg4326"))
+newabsent <- rename(absent, c("randomlong.epsg3035"="long.epsg3035", "randomlat.epsg3035"="lat.epsg3035", "randomlong.epsg4326"="long.epsg4326", "randomlat.epsg4326"="lat.epsg4326"))
+
+#### ADD STOPOVER DURATION TO DATA ####
+
+### creates 2 files: present.LOS and absent.LOS with length of stay data added onto present and absent datasets
+setwd(paste(parentwd, "/scripts/", sep=""))
+source("source code to add stopover duration data for analysis.R")
+
+############# subset out only one round of absences
+#newabsent <- subset(newabsent, nabsence==1)
+newabsent <- newabsent[,-which(names(newabsent) %in% c("nabsence","random.scale"))]
+absent.LOS <- absent.LOS[,-which(names(absent.LOS) %in% c("nabsence","random.scale"))]
+
+present.LOS <- present.LOS[,-which(names(present.LOS) %in% c("datetime"))]
+present.LOS <- present.LOS[c(2,1,3:length(present.LOS))]
+
+alldata <- rbind(newpresent, newabsent)
+
+alldata.LOS <- rbind(present.LOS, absent.LOS)
+
+plotLOSdat <- alldata.LOS[alldata.LOS$presence==1,c("name","mgroup","usecountry","LOS","laststop","strategy","Sahara.success","year")]
+
+plotLOSdat2 <- unique(plotLOSdat)
+plotLOSdat2 <- droplevels(plotLOSdat2)
+
+meanLOSbycountry <- data.frame(mean=tapply(plotLOSdat2$LOS, plotLOSdat2$usecountry, mean), sd=tapply(plotLOSdat2$LOS, plotLOSdat2$usecountry, sd))
+#boxplot(LOS~usecountry, data=plotLOSdat2, las=2)
+qplot(factor(usecountry), LOS, data = plotLOSdat2, geom = "boxplot")
+setwd(paste(outputwd, "/autumn stopover GLMM results/", sep=""))
+ggsave("mean LOS by country.jpg", width=15, height=12, units="in")
+
+
+hist(plotLOSdat2$LOS, breaks=35)
+
+# 
+# plotdistdat <- alldata.LOS[alldata.LOS$presence==1, c("name","mgroup","id","distance")]
+# plotdistdat <- unique(plotdistdat)
+# 
+# hist(plotdistdat$distance[plotdistdat$distance<50], breaks=50)
+
+### add 3-level designation level variable
+
+alldata.LOS$desig <- factor(alldata.LOS$desiglevel, levels=c(levels(alldata.LOS$desiglevel), "N"))
+alldata.LOS$desig[which(is.na(alldata.LOS$desiglevel))] <- "N"
+
+#### ---- PLOTTING DATASET ---- ####
+
+analysistype2 <- c("FM","LS","SS","FS","DL")
+
+for (i in 1:length(analysistype2)) {
   
-  corine.present <- prop.table(table(present$LAND.CLASS))
-  corine.absent <- prop.table(table(absent$LAND.CLASS))
-  corine.summary <- rbind(corine.present, corine.absent)
+  analysistype <- analysistype2[i]
   
-  ### barplot showing all random scales
-  par(mar=c(5,5,2,1))
+  fulldat <- with(alldata.LOS, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, country=usecountry, desig, laststop, Sahara.success, LOS))
   
-  barplot(as.matrix(corine.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
+  # if full dataset model
+  if (analysistype=="FM") {
+    dat <- fulldat
+  }
+  
+  # if long stopover
+  if (analysistype=="LS"){
+    dat <- subset(fulldat, LOS >= 10)
+    dat <- droplevels(dat)
+  }
+  
+  
+  # if short stopover
+  if (analysistype=="SS"){
+    dat <- subset(fulldat, LOS < 10)
+    dat <- droplevels(dat)
+  }
+  
+  # if final stopover
+  if (analysistype=="FS"){
+    ## add a variable for whether Sahara crossing was attempted or not (ie. remove birds that failed before attempting)
+    setwd(datawd)
+    othervar <- read.csv("cuckoo migratory strategy and Sahara crossing success.csv", header=TRUE)
+    
+    attemptSahara <- with(othervar, data.frame(name, attemptSahara=attempted.Sahara.crossing))
+    attemptdat <- merge(fulldat, attemptSahara)
+    
+    dat <- subset(attemptdat, laststop=="Y")
+    dat <- droplevels(dat)
+    
+  }
+  
+  # if testing designation level, call desig variable "PA" so same models can be used
+  if (analysistype=="DL") {
+    dat <- rename(fulldat, c("PA"="PAoverlap", "desig"="PA"))
+  }
+  
+  
+  ####=========== HABITAT USE: POINTS ============####
+  
   
   #### PROPORTION OF POINTS BY HABITAT, BY COUNTRY - POINTS ####
   
-  if (points) {
-    
-    habitat.present <- prop.table(table(present$LAND.CLASS, present$country),2)
-    habitat.absent <- prop.table(table(absent$LAND.CLASS, absent$country), 2)
-    habitat.summary <- rbind(habitat.present, habitat.absent)
-    habitat.summary <- data.frame(habitat.summary, presence=rep(c("present","absent"), each=5), habitat=row.names(habitat.summary))
-    
-    habitatcountries <- reshape(habitat.summary, times=c(names(habitat.summary)[1:11]), timevar="country", varying=list(c(names(habitat.summary)[1:11])), direction="long")
-    
-    byhab.country <- with(habitatcountries, data.frame(presence, country, habitat, proportion=at.sea))
-    
-    p <- ggplot(byhab.country, aes(x=habitat, y=proportion, fill=presence)) + geom_bar(stat="identity", position="dodge")
-    countrylabels <- labs(x="Country", y="Proportion of points per habitat", title="Proportion of points per habitat, by country", size=4)
-    countrytheme <- theme(
-      axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
-      axis.text.x = element_text(size=12, angle=45, vjust=0.7), 
-      axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
-      axis.text.y = element_text(size=12, vjust=0.5),
-      legend.text=element_text(size=14), 
-      legend.title=element_text(size=14),
-      plot.title = element_text(face="bold", size=18)
-    )
-    p + countrylabels + countrytheme + scale_fill_manual(values=c("#0066CC", "#003366")) + facet_wrap(~ country, ncol=3)
-    
-    setwd(paste(outputwd, "/GLMM results/", sep=""))
-    ggsave("proportion of points per habitat by country.jpg")
-    
-  }
+  habitat.present <- prop.table(table(dat$habitat, dat$country, as.factor(dat$presence))[,,"1"], 2)
+  habitat.absent <- prop.table(table(dat$habitat, dat$country, as.factor(dat$presence))[,,"0"], 2)
   
-}
+  # sample sizes
+  habp.tot <- margin.table(table(dat$habitat, dat$country, as.factor(dat$presence))[,,"1"],2)
+  haba.tot <- margin.table(table(dat$habitat, dat$country, as.factor(dat$presence))[,,"0"],2)
 
-
-####=========== HABITAT USE: POLYGONS ============####
-
-if (!points) {
+  npresent <- data.frame(country=names(habp.tot), presence="present", n=habp.tot)
+  zerocountries <- npresent[which(npresent$n==0),"country"]
+  notcountries <- npresent$country %in% zerocountries
+  npresent <- subset(npresent, n!=0)
+  npresent2 <- data.frame(npresent, x=rep(4, nrow(npresent)), y=0.6)
   
-  ################# MULTIPLE RANDOM SCALES ###################
+  nabsent <- data.frame(country=names(haba.tot), presence="absent", n=haba.tot)
+  nabsent <- subset(nabsent, !notcountries)
+  nabsent2 <- data.frame(nabsent, x=rep(4, nrow(nabsent)), y=0.7)
   
-  meancorine.present <- aggregate(present[,c(habitatvarnames)], list(presence=present$presence), mean)
-  meancorine.present <- meancorine.present[,-1]
-  rownames(meancorine.present) <- "present"
+  # summary table, absences and presences
+  habitat.summary <- rbind(habitat.present, habitat.absent)
+  habitat.summary2 <- habitat.summary[, apply(habitat.summary, 2, function(x) !any(is.na(x)))] 
+  habitat.summary3 <- data.frame(habitat.summary2, presence=rep(c("present","absent"), each=5), habitat=row.names(habitat.summary2))
+  colnames(habitat.summary3) <- c(colnames(habitat.summary2), "presence", "habitat")
   
-  corinesummary.absent <- list()
-  for (i in 1:length(absentsplit)) {
-    absentsubset <- absentsplit[[i]]
-    corinesummary.absent[[i]] <- aggregate(absentsubset[,habitatvarnames], list(presence=absentsubset$presence), mean)
-  }
+  habitatcountries <- reshape(habitat.summary3, times=c(names(habitat.summary3)[-which(names(habitat.summary3) %in% c("presence","habitat"))]), timevar="country", varying=list(c(names(habitat.summary3)[-which(names(habitat.summary3) %in% c("presence","habitat"))])), direction="long")
   
-  names(corinesummary.absent) <- paste("absent.",names(absentsplit), sep="")
+  byhab.country <- data.frame(presence=habitatcountries$presence, country=habitatcountries$country, habitat=habitatcountries$habitat, proportion=habitatcountries[,4])
   
-  meancorine.absent <- do.call(rbind,corinesummary.absent)
-  meancorine.absent <- meancorine.absent[,-1]
   
-  meancorine <- rbind(meancorine.present, meancorine.absent)
+  ### PLOT SPECIFICATIONS
   
-  # meancorine <- reshape(corinesummary, times=c("agriculture","artificial","bare_land","forest","scrub_grassland","wetland_water"), timevar="landcover", varying=list(c("agriculture","artificial","bare_land","forest","scrub_grassland","wetland_water")), direction="long")
+  # plot label
+  if (analysistype=="FM") analysislabel <- "OVERALL"
+  if (analysistype=="DL") analysislabel <- "DESIGNATION LEVEL"
+  if (analysistype=="SS") analysislabel <- "SHORT STOPOVERS"
+  if (analysistype=="LS") analysislabel <- "LONG STOPOVERS"
+  if (analysistype=="FS") analysislabel <- "FINAL STOPOVERS"
+  if (analysistype=="DW") analysislabel <- "DESIGNATION LEVEL, LUMPING No and National for SW"
   
-  ### barplot showing all random scales
-  par(mar=c(5,5,2,1))
-  
-  barplot(as.matrix(meancorine), beside=TRUE, col=c("darkblue","lightblue","dodgerblue","cyan","lightgreen"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present","random 50 km", "random 100km", "random 200km", "random 500km"), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
-  
-  ### pooling across random scales ###
-  absentpooled <- apply(meancorine.absent, 2, mean)
-  meancorine <- rbind(meancorine.present, absentpooled)
-  rownames(meancorine) <- c("present", "absent")
-  
-  ### barplot showing pooled random scales
-  par(mar=c(5,5,2,1))
-  
-  barplot(as.matrix(meancorine), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present","random"), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
-  
-  ################# SINGLE RANDOM SCALE ###################
-  
-  meancorine.absent <- aggregate(absent[,c(habitatvarnames)], list(presence=absent$presence), mean)
-  meancorine.absent <- meancorine.absent[,-1]
-  rownames(meancorine.absent) <- "absent"
-  
-  meancorine <- rbind(meancorine.present, meancorine.absent)
-  
-  ### barplot showing single random scale
-  par(mar=c(5,5,2,1))
-  
-  barplot(as.matrix(meancorine), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
-  
-  #########################################################
-    
-  ###!!!!!!!!!!!!!!!!! CAUTIONARY NOTE !!!!!!!!!!!!!!!!!!!!!!###
-  
-  # mtext("random wetland-water not necessarily representative due to sampling methodology", cex=0.8, side=3, line=1)
-  
-  # more wetland/water than random, but random habitat extraction specifically tries to avoid stopover polygons with too much water, so possibly an artifact of random stopover sampling procedure
-  
-  # may need to re-run with a lower avoidance rate of wetland-water sites (sea only?), or increase the proportion to 0.6-0.7
-  
-  # latest revision of random stopover generation code to generate 10 pseudoabsences per absence allowed more wetland.water habitat (particularly inland marshes, peat bogs, and water courses) - 0.5 threshold for choosing absence stopovers without too much other water categories (marine and water bodies)
-  
-}
-
-
-###-----------------------------------------###
-####            PROTECTED AREAS            ####
-###-----------------------------------------###
-
-#### PROPORTION OF ALL POINTS THAT OVERLAP WITH PROTECTED AREA - POINTS ####
-
-if (points) {
-  
-  overlap.present <- prop.table(table(present$PAoverlap))
-  overlap.absent <- prop.table(table(absent$PAoverlap))
-  overlap.summary <- rbind(overlap.present, overlap.absent)
-  
-  par(mar=c(5,5,2,1))
-  barplot(as.matrix(overlap.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("N", "Y"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="In a protected area?", ylab="proportion of all points \n in protected areas")
-  
-}
-
-
-#### PROPORTION OF ALL POINTS THAT OVERLAP WITH PROTECTED AREA, BY COUNTRY - POINTS ####
-
-if (points) {
-  
-  overlap.present <- prop.table(table(present$PAoverlap, present$country),2)
-  overlap.absent <- prop.table(table(absent$PAoverlap, absent$country), 2)
-  overlap.summary <- rbind(overlap.present, overlap.absent)
-  overlap.summary <- data.frame(overlap.summary, presence=rep(c("present","absent"), each=2), PA=row.names(overlap.summary))
-  overlapcountries <- subset(overlap.summary, PA=="Y")
-  
-  overlapcountries2 <- reshape(overlapcountries, times=c(names(overlapcountries)[1:11]), timevar="country", varying=list(c(names(overlapcountries)[1:11])), direction="long")
-  
-  inPA.country <- with(overlapcountries2, data.frame(presence, country, proportion=at.sea))
-  
-  p <- ggplot(inPA.country, aes(x=country, y=proportion, fill=presence)) + geom_bar(stat="identity", position="dodge")
-  countrylabels <- labs(x="Country", y="Proportion of points per country in a PA", title="Proportion of points per country in a protected area", size=4)
-  countrytheme <- theme(
+  plottheme <- theme(
     axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
-    axis.text.x = element_text(size=12), 
+    axis.text.x = element_text(size=14, colour="black", angle=45, vjust=0.5), 
     axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
-    axis.text.y = element_text(size=12, vjust=0.5),
+    axis.text.y = element_text(size=14, vjust=0.5, colour="black"),
+    plot.title = element_text(size=16, face="bold", vjust=0.5),
     legend.text=element_text(size=14), 
     legend.title=element_text(size=14),
-    plot.title = element_text(face="bold", size=18)
+    legend.key=element_rect(fill="white"),
+    legend.key.width=unit(2,"cm"),
+    panel.background=element_rect(colour="black", fill="white"),
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    strip.text.x=element_text(face="bold", size=14)
   )
-  p + countrylabels + countrytheme + scale_fill_manual(values=c("#0066CC", "#003366"))
   
-  setwd(paste(outputwd, "/GLMM results/", sep=""))
-  ggsave("proportion of points per country in a PA.jpg")
-
-}
-
-#### PROPORTION OF ALL STOPOVER POLYGONS THAT OVERLAP WITH PROTECTED AREA ####
-
-if (!points) {
+  habitatlabels <- labs(x="Habitat", y="Proportion of points per habitat", title=paste("Proportion of points per habitat by country", randomradius, "km", analysislabel, sep=" "))
   
-  overlap.present <- prop.table(table(present$overlap))
-  overlap.absent <- prop.table(table(absent$overlap))
+  
+  ### PLOT
+  
+  p <- ggplot(byhab.country, aes(x=habitat, y=proportion, fill=presence)) + geom_bar(stat="identity", position="dodge")
+  
+  p + habitatlabels + plottheme + scale_fill_manual(values=c("#0066CC", "#003366")) + facet_wrap(~ country, ncol=3) + geom_text(aes(x,y,label=paste("N present = ",n)), data=npresent2) + geom_text(aes(x,y,label=paste("N absent = ", n)), data=nabsent2)
+  
+  setwd(paste(outputwd, "/autumn stopover GLMM results/", sep=""))
+  ggsave(paste("proportion of points per habitat by country", analysistype, randomradius, "km.jpg", sep=" "), width=15, height=12, units="in")
+  
+  
+  ###-----------------------------------------###
+  ####            PROTECTED AREAS            ####
+  ###-----------------------------------------###
+  
+  #### PROPORTION OF ALL POINTS THAT OVERLAP WITH PROTECTED AREA, BY COUNTRY - POINTS ####
+  
+  overlap.present <- prop.table(table(dat$PA, dat$country, as.factor(dat$presence))[,,"1"], 2)
+  overlap.absent <- prop.table(table(dat$PA, dat$country, as.factor(dat$presence))[,,"0"], 2)
+  
+  ### sample sizes
+  
+  p.tot <- margin.table(table(dat$PA, dat$country, as.factor(dat$presence))[,,"1"],2)
+  a.tot <- margin.table(table(dat$PA, dat$country, as.factor(dat$presence))[,,"0"],2)
+  zerocountries <- names(which(p.tot==0))
+  
+  npresent <- data.frame(country=names(p.tot), presence="present", n=p.tot)
+  npresent <- subset(npresent, !(npresent$country %in% zerocountries))
+  npresent2 <- data.frame(npresent, x=seq(1.2, (nrow(npresent)+0.2), by=1), y=1.05)
+  
+  nabsent <- data.frame(country=names(a.tot), presence="absent", n=a.tot)
+  nabsent <- subset(nabsent, !(nabsent$country %in% zerocountries))
+  nabsent2 <- data.frame(nabsent, x=seq(0.8, (nrow(nabsent)-0.2), by=1), y=1.05)
+  
+  # summary table, absences and presences
   overlap.summary <- rbind(overlap.present, overlap.absent)
+  overlap.summary <- overlap.summary[, apply(overlap.summary, 2, function(x) !any(is.na(x)))]
   
-  par(mar=c(5,5,2,1))
-  barplot(as.matrix(overlap.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("N", "Y"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="In a protected area?", ylab="proportion of all points \n in protected areas")
+  if (analysistype=="DL")  overlap.summary <- data.frame(overlap.summary, presence=rep(c("present","absent"), each=3), PA=row.names(overlap.summary))
+  if (analysistype!="DL") overlap.summary <- data.frame(overlap.summary, presence=rep(c("present","absent"), each=2), PA=row.names(overlap.summary))
   
-  ####==== Proportion by area of stopover that overlaps with PA overlap ====####
+  if (analysistype=="DL") overlapcountries <- subset(overlap.summary, PA=="International")
+  if (analysistype!="DL") overlapcountries <- subset(overlap.summary, PA=="Y")
   
-  meanpropPA.present <- mean(present$prop.overlap)
+  #names(habitat.summary)[-which(names(habitat.summary) %in% c("presence","habitat"))]
   
-  summarypropPA.absent <- list()
-  for (i in 1:length(absentsplit)) {
-    absentsubset <- absentsplit[[i]]
-    summarypropPA.absent[[i]] <- mean(absentsubset$prop.overlap)
+  overlapcountries2 <- reshape(overlapcountries, times=c(names(overlap.summary)[-which(names(overlap.summary) %in% c("presence","PA"))]), timevar="country", varying=list(c(names(overlap.summary)[-which(names(overlap.summary) %in% c("presence","PA"))])), direction="long")
+  
+  inPA.country <- data.frame(presence=overlapcountries2$presence, country=overlapcountries2$country, proportion=overlapcountries2[,4])
+  
+  inPA.country$country <- revalue(inPA.country$country, c("United.Kingdom"="United Kingdom"))
+  
+  ### PLOT SPECIFICATION
+  
+  if (analysistype=="DL") {
+    countrylabels <- labs(x="Country", y="Proportion of points in an INTERNATIONAL PA", title=paste("Proportion of points per country in an INTERNATIONAL PA", randomradius, "km", analysislabel, sep=" "))
   }
   
-  names(summarypropPA.absent) <- paste("absent.",names(absentsplit), sep="")
-  
-  meanpropPA.absent <- do.call(rbind,summarypropPA.absent)
-  
-  meanpropPA <- rbind(meanpropPA.present, meanpropPA.absent)
-  rownames(meanpropPA) <- c("present",rownames(meanpropPA.absent))
-  
-  par(mar=c(5,5,2,1))
-  barplot(meanpropPA, beside=TRUE, space=0.1, col=c("darkblue","lightblue","dodgerblue","cyan","lightgreen"), names.arg=c("present","random 50 km", "random 100km", "random 200km", "random 500km"), cex.names=0.7, xpd=TRUE, ylab="mean proportion of stopover \n overlapping protected areas", ylim=c(0,0.4))
-  
-  ### pooled random stopovers ###
-  meanpropPA <- rbind(meanpropPA.present, mean(meanpropPA.absent))
-  
-  ### pooled barplot ###
-  par(mar=c(5,5,2,1))
-  barplot(meanpropPA, beside=TRUE, space=0.1, col=c("darkblue","lightblue"), names.arg=c("present","random"), cex.names=0.7, xpd=TRUE, ylab="mean proportion of stopover \n overlapping protected areas", ylim=c(0,0.4))
-  
-}
-
-
-####==== Proportion of international vs national PA use ====####
-
-#### POINTS ####
-
-if (points) {
-  
-  x <- subset(present, PAoverlap=="Y")
-  y <- subset(absent, PAoverlap=="Y")
-  desig.P <- prop.table(table(x$desiglevel))
-  desig.A <- prop.table(table(y$desiglevel))
-  desig.summary <- rbind(desig.P, desig.A)
-  
-  par(mar=c(5,5,2,1), mfrow=c(1,1))
-  barplot(as.matrix(desig.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("International", "National"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="Protected Area designation level", ylab="proportion of all points \n in protected areas")
-  
-  
-}
-
-#### POLYGONS ####
-
-if (!points) {
-  
-  #### MULTIPLE SCALES ###
-  
-  desigprop.P <- prop.table(table(present$overlap, present$desig_type))[2,]
-  
-  desigprop.A <- list()
-  for (i in 1:4) {
-    absentsubset <- absentsplit[[i]]
-    overlapsubset <- subset(absentsubset, overlap=="Y")
-    desigprop.A[[i]] <- prop.table(table(overlapsubset$desig_type))
+  if (analysistype!="DL") {
+    countrylabels <- labs(x="Country", y="Proportion of points in a PA", title=paste("Proportion of points per country in a PA", randomradius, "km", analysislabel, sep=" "))
   }
   
-  designation <- rbind(desigprop.P, do.call(rbind, desigprop.A))
-  rownames(designation) <- c("present","absent.50","absent.100","absent.200","absent.500")
+  ### PLOT
   
-  par(mar=c(5,5,2,8), xpd=TRUE)
-  barplot(designation, beside=TRUE, col=c("darkblue","lightblue","dodgerblue","cyan","lightgreen"), xlab="Protected area designation level", ylab="Proportion of overlapping protected \n area at each designation level")
-  legend("right", xpd=TRUE, c("present","random 50 km", "random 100km", "random 200km", "random 500km"), bty="n", cex=0.8, fill=c("darkblue","lightblue","dodgerblue","cyan","lightgreen"), inset=c(-0.3,-0.2))
+  p <- ggplot(inPA.country, aes(x=country, y=proportion, fill=presence)) + geom_bar(stat="identity", position="dodge")
   
-  ### pooled random stopovers ###
-  designation <- rbind(desigprop.P, apply(do.call(rbind, desigprop.A), 2, mean))
+  p + countrylabels + plottheme + scale_fill_manual(values=c("#0066CC", "#003366")) + geom_text(aes(x,y,label=n, size=1, angle=30), data=nabsent2, show_guide=FALSE) + geom_text(aes(x,y,label=n, size=1, angle=30), data=npresent2, show_guide=FALSE) + scale_y_continuous(limits=c(0,1.1))
   
-  ### pooled random stopovers barplot ###
-  par(mar=c(5,5,2,5), xpd=TRUE)
-  barplot(designation, beside=TRUE, col=c("darkblue","lightblue"), xlab="Protected area designation level", ylab="Proportion of overlapping protected \n area at each designation level", ylim=c(0,0.7))
-  legend("right", xpd=TRUE, c("present","random"), bty="n", cex=0.8, fill=c("darkblue","lightblue"), inset=c(-0.15,-0.2))
+  setwd(paste(outputwd, "/autumn stopover GLMM results/", sep=""))
+  ggsave(paste("proportion of points per country in a PA", analysistype, randomradius, "km.jpg", sep=" "), height=12, width=15, units="in")
   
 }
 
-
-
-###--------------------------------###
-####   PROTECTED AREAS & HABITAT ####
-###--------------------------------###
-
-if (points) {
-  
-  PAhab.present <- prop.table(table(present$PAoverlap, present$LAND.CLASS))
-  PAhab.absent <- prop.table(table(absent$PAoverlap, absent$LAND.CLASS))
-  overlap.summary <- rbind(PAhab.present, PAhab.absent)
-  
-  par(mar=c(5,5,2,1), mfrow=c(1,2))
-  barplot(as.matrix(PAhab.present), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("Present, Outside PA","Present, Inside PA"), args.legend=list(bty="n", cex=0.8), xlab="Land cover class", ylab="proportion of all points")
-  
-  barplot(as.matrix(PAhab.absent), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c(paste("Absent ", randomradius, " km, Outside PA", sep=""), paste("Absent ", randomradius , " km, Inside PA", sep="")), args.legend=list(bty="n", cex=0.8), xlab="Land cover class", ylab="proportion of all points")
-  
-  
-}
+# 
+# 
+# ####=========== HABITAT USE: POLYGONS ============####
+# 
+# if (!points) {
+#   
+#   ################# MULTIPLE RANDOM SCALES ###################
+#   
+#   meancorine.present <- aggregate(present[,c(habitatvarnames)], list(presence=present$presence), mean)
+#   meancorine.present <- meancorine.present[,-1]
+#   rownames(meancorine.present) <- "present"
+#   
+#   corinesummary.absent <- list()
+#   for (i in 1:length(absentsplit)) {
+#     absentsubset <- absentsplit[[i]]
+#     corinesummary.absent[[i]] <- aggregate(absentsubset[,habitatvarnames], list(presence=absentsubset$presence), mean)
+#   }
+#   
+#   names(corinesummary.absent) <- paste("absent.",names(absentsplit), sep="")
+#   
+#   meancorine.absent <- do.call(rbind,corinesummary.absent)
+#   meancorine.absent <- meancorine.absent[,-1]
+#   
+#   meancorine <- rbind(meancorine.present, meancorine.absent)
+#   
+#   # meancorine <- reshape(corinesummary, times=c("agriculture","artificial","bare_land","forest","scrub_grassland","wetland_water"), timevar="landcover", varying=list(c("agriculture","artificial","bare_land","forest","scrub_grassland","wetland_water")), direction="long")
+#   
+#   ### barplot showing all random scales
+#   par(mar=c(5,5,2,1))
+#   
+#   barplot(as.matrix(meancorine), beside=TRUE, col=c("darkblue","lightblue","dodgerblue","cyan","lightgreen"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present","random 50 km", "random 100km", "random 200km", "random 500km"), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
+#   
+#   ### pooling across random scales ###
+#   absentpooled <- apply(meancorine.absent, 2, mean)
+#   meancorine <- rbind(meancorine.present, absentpooled)
+#   rownames(meancorine) <- c("present", "absent")
+#   
+#   ### barplot showing pooled random scales
+#   par(mar=c(5,5,2,1))
+#   
+#   barplot(as.matrix(meancorine), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present","random"), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
+#   
+#   ################# SINGLE RANDOM SCALE ###################
+#   
+#   meancorine.absent <- aggregate(absent[,c(habitatvarnames)], list(presence=absent$presence), mean)
+#   meancorine.absent <- meancorine.absent[,-1]
+#   rownames(meancorine.absent) <- "absent"
+#   
+#   meancorine <- rbind(meancorine.present, meancorine.absent)
+#   
+#   ### barplot showing single random scale
+#   par(mar=c(5,5,2,1))
+#   
+#   barplot(as.matrix(meancorine), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="land cover type", ylab="mean proportion of \n land cover type used")
+#   
+#   #########################################################
+#   
+#   ###!!!!!!!!!!!!!!!!! CAUTIONARY NOTE !!!!!!!!!!!!!!!!!!!!!!###
+#   
+#   # mtext("random wetland-water not necessarily representative due to sampling methodology", cex=0.8, side=3, line=1)
+#   
+#   # more wetland/water than random, but random habitat extraction specifically tries to avoid stopover polygons with too much water, so possibly an artifact of random stopover sampling procedure
+#   
+#   # may need to re-run with a lower avoidance rate of wetland-water sites (sea only?), or increase the proportion to 0.6-0.7
+#   
+#   # latest revision of random stopover generation code to generate 10 pseudoabsences per absence allowed more wetland.water habitat (particularly inland marshes, peat bogs, and water courses) - 0.5 threshold for choosing absence stopovers without too much other water categories (marine and water bodies)
+#   
+# }
+# 
+# 
+# ###-----------------------------------------###
+# ####            PROTECTED AREAS            ####
+# ###-----------------------------------------###
+# 
+# #### PROPORTION OF ALL STOPOVER POLYGONS THAT OVERLAP WITH PROTECTED AREA ####
+# 
+# if (!points) {
+#   
+#   overlap.present <- prop.table(table(present$overlap))
+#   overlap.absent <- prop.table(table(absent$overlap))
+#   overlap.summary <- rbind(overlap.present, overlap.absent)
+#   
+#   par(mar=c(5,5,2,1))
+#   barplot(as.matrix(overlap.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("N", "Y"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="In a protected area?", ylab="proportion of all points \n in protected areas")
+#   
+#   ####==== Proportion by area of stopover that overlaps with PA overlap ====####
+#   
+#   meanpropPA.present <- mean(present$prop.overlap)
+#   
+#   summarypropPA.absent <- list()
+#   for (i in 1:length(absentsplit)) {
+#     absentsubset <- absentsplit[[i]]
+#     summarypropPA.absent[[i]] <- mean(absentsubset$prop.overlap)
+#   }
+#   
+#   names(summarypropPA.absent) <- paste("absent.",names(absentsplit), sep="")
+#   
+#   meanpropPA.absent <- do.call(rbind,summarypropPA.absent)
+#   
+#   meanpropPA <- rbind(meanpropPA.present, meanpropPA.absent)
+#   rownames(meanpropPA) <- c("present",rownames(meanpropPA.absent))
+#   
+#   par(mar=c(5,5,2,1))
+#   barplot(meanpropPA, beside=TRUE, space=0.1, col=c("darkblue","lightblue","dodgerblue","cyan","lightgreen"), names.arg=c("present","random 50 km", "random 100km", "random 200km", "random 500km"), cex.names=0.7, xpd=TRUE, ylab="mean proportion of stopover \n overlapping protected areas", ylim=c(0,0.4))
+#   
+#   ### pooled random stopovers ###
+#   meanpropPA <- rbind(meanpropPA.present, mean(meanpropPA.absent))
+#   
+#   ### pooled barplot ###
+#   par(mar=c(5,5,2,1))
+#   barplot(meanpropPA, beside=TRUE, space=0.1, col=c("darkblue","lightblue"), names.arg=c("present","random"), cex.names=0.7, xpd=TRUE, ylab="mean proportion of stopover \n overlapping protected areas", ylim=c(0,0.4))
+#   
+# }
+# 
+# 
+# ####==== Proportion of international vs national PA use ====####
+# 
+# #### POINTS ####
+# 
+# if (points) {
+#   
+#   x <- subset(present, PAoverlap=="Y")
+#   y <- subset(absent, PAoverlap=="Y")
+#   desig.P <- prop.table(table(x$desiglevel))
+#   desig.A <- prop.table(table(y$desiglevel))
+#   desig.summary <- rbind(desig.P, desig.A)
+#   
+#   par(mar=c(5,5,2,1), mfrow=c(1,1))
+#   barplot(as.matrix(desig.summary), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("International", "National"), cex.names=0.8, xpd=TRUE, legend=c("present", paste("random ", randomradius, " km", sep="")), args.legend=list(bty="n", cex=0.8), xlab="Protected Area designation level", ylab="proportion of all points \n in protected areas")
+#   
+#   
+# }
+# 
+# #### POLYGONS ####
+# 
+# if (!points) {
+#   
+#   #### MULTIPLE SCALES ###
+#   
+#   desigprop.P <- prop.table(table(present$overlap, present$desig_type))[2,]
+#   
+#   desigprop.A <- list()
+#   for (i in 1:4) {
+#     absentsubset <- absentsplit[[i]]
+#     overlapsubset <- subset(absentsubset, overlap=="Y")
+#     desigprop.A[[i]] <- prop.table(table(overlapsubset$desig_type))
+#   }
+#   
+#   designation <- rbind(desigprop.P, do.call(rbind, desigprop.A))
+#   rownames(designation) <- c("present","absent.50","absent.100","absent.200","absent.500")
+#   
+#   par(mar=c(5,5,2,8), xpd=TRUE)
+#   barplot(designation, beside=TRUE, col=c("darkblue","lightblue","dodgerblue","cyan","lightgreen"), xlab="Protected area designation level", ylab="Proportion of overlapping protected \n area at each designation level")
+#   legend("right", xpd=TRUE, c("present","random 50 km", "random 100km", "random 200km", "random 500km"), bty="n", cex=0.8, fill=c("darkblue","lightblue","dodgerblue","cyan","lightgreen"), inset=c(-0.3,-0.2))
+#   
+#   ### pooled random stopovers ###
+#   designation <- rbind(desigprop.P, apply(do.call(rbind, desigprop.A), 2, mean))
+#   
+#   ### pooled random stopovers barplot ###
+#   par(mar=c(5,5,2,5), xpd=TRUE)
+#   barplot(designation, beside=TRUE, col=c("darkblue","lightblue"), xlab="Protected area designation level", ylab="Proportion of overlapping protected \n area at each designation level", ylim=c(0,0.7))
+#   legend("right", xpd=TRUE, c("present","random"), bty="n", cex=0.8, fill=c("darkblue","lightblue"), inset=c(-0.15,-0.2))
+#   
+# }
+# 
+# 
+# 
+# ###--------------------------------###
+# ####   PROTECTED AREAS & HABITAT ####
+# ###--------------------------------###
+# 
+# if (points) {
+#   
+#   PAhab.present <- prop.table(table(present$PAoverlap, present$LAND.CLASS))
+#   PAhab.absent <- prop.table(table(absent$PAoverlap, absent$LAND.CLASS))
+#   overlap.summary <- rbind(PAhab.present, PAhab.absent)
+#   
+#   par(mar=c(5,5,2,1), mfrow=c(1,2))
+#   barplot(as.matrix(PAhab.present), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c("Present, Outside PA","Present, Inside PA"), args.legend=list(bty="n", cex=0.8), xlab="Land cover class", ylab="proportion of all points")
+#   
+#   barplot(as.matrix(PAhab.absent), beside=TRUE, col=c("darkblue","lightblue"), names.arg=c("agriculture", "forest", "scrub \n grassland", "unsuitable", "wetland \n water"), cex.names=0.8, xpd=TRUE, legend=c(paste("Absent ", randomradius, " km, Outside PA", sep=""), paste("Absent ", randomradius , " km, Inside PA", sep="")), args.legend=list(bty="n", cex=0.8), xlab="Land cover class", ylab="proportion of all points")
+#   
+#   
+# }

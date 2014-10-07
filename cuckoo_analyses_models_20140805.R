@@ -1,12 +1,13 @@
 ##########################################################
 #
-#   CUCKOO ANALYSES: 1) OCCUPANCY MODEL, 2) SUCCESS/FAILURE DIFFERENCES
+#   CUCKOO ANALYSES: 1) OCCUPANCY MODEL
 #
 #  Samantha Franks
 #  11 April 2014
 #  24 May 2014
 #  17 Jul 2014: new random polygons generating 10 pseudoabsences/presence
 #  5 Aug 2014: analysis using randomly generated points instead of polygons for absences, still 10 absent stopovers per presence
+#  10 Sep 2014: added country data to absence points and added country data to at sea points
 #
 ##########################################################
 
@@ -64,36 +65,38 @@
 # - Response = presence/absence
 # - Protected area (categorical): does point fall in a protected area, Y/N
 # - Winter climate (continuous): SPEI 6-month SPEI in March, which summarizes the relative precipitation/evapotranspiration that has occurred over the last 6 months (Oct-Mar) compared to the norm (standardized against the background 30 year dataset)
-# - spring climate (continuous): sPEI 6-month SPEI in August, which summarizes the relative precipitation/evapotranspiration that has occurred over the last 6 months (Mar-Aug) compared to the norm (standardized against the background 30 year dataset)
+# - spring climate (continuous): SPEI 6-month SPEI in August, which summarizes the relative precipitation/evapotranspiration that has occurred over the last 6 months (Mar-Aug) compared to the norm (standardized against the background 30 year dataset)
 # - elevation
 
-###--- ANALYSIS 2 - SUCCESS OF SAHARA CROSSING MODEL ---###
+#### COMMAND ARGUMENTS ####
+Args <- commandArgs()
 
-### DO HABITAT, SIZE OF PROTECTED AREA, LEVEL OF PROTECTED AREA PROTECTION, CLIMATE, AND ELEVATION OF THE *FINAL EUROPEAN STOPOVER* PREDICT SUCCESS/FAILURE OF SAHARA CROSSING?
+route <- substr(Args[3],1,2)	# SW/SE
+randomradius <- as.numeric(substr(Args[3],3,5)) # 50, 100, 200, or 500km
 
-# logistic regression, with individual as a random effect
+if (cluster) {
+  library(plyr)
+  library(reshape)
+  #library(glmmML)
+  library(lme4)
+  #library(AICcmodavg)
+  library(arm)
+}
 
-# success/failure (sampling unit = the final stopover MCP) ~
-#     HABITAT (proportion of 6 land cover categories)
-#     AREA PROTECTED AREA (amount of stopover MCP that is PA, by proportion or absolute area in km2)
-#     LEVEL OF PROTECTION (national or international)
-#     ELEVATION
-#     WINTER RAINFALL (average local rainfall for grid cell Nov-Feb)
-#     WINTER TEMP (average local temp for grid cell Nov-Feb)
-#     SPRING RAINFALL (average local rainfall for grid cell Mar-Jun)
-#     SPRING TEMP (average local temp for grid cell Mar-Jun)
-#     MIGRATION STRATEGY (E/W)
-#     random effect of stopover? or individual? or stopover nested within individual?
+if (!cluster) {
+  library(plyr)
+  library(reshape)
+  #library(glmmML)
+  library(lme4)
+  #library(AICcmodavg)
+  library(arm)
+  library(ggplot2)
+  library(scales)
+  library(sp)
+  library(rgeos)
+  library(rgdal)
+}
 
-
-library(plyr)
-library(reshape)
-#library(glmmML)
-library(lme4)
-#library(AICcmodavg)
-library(arm)
-library(ggplot2)
-library(scales)
 
 
 ###----------------------------------------------###
@@ -101,13 +104,7 @@ library(scales)
 ###----------------------------------------------###
 
 
-points <- TRUE
-
-cluster <- FALSE
-
-Mac <- FALSE
-
-randomradius <- 50
+Mac <- TRUE
 
 if (!cluster) {
   
@@ -122,46 +119,24 @@ if (cluster) parentwd <- c("/users1/samf/cuckoos")
 datawd <- paste(parentwd, "/data", sep="")
 outputwd <- paste(parentwd, "/output", sep="")
 
-#extractionwd <- c("/corine PA elevation spei extracted values/")
 
 ####==== IMPORT POINT DATA ====####
 
-if (points) {
-  
 setwd(paste(datawd, "/data for analysis/", sep=""))
-present <- read.csv("presence data all variables points.csv", header=T)
-absent <- read.csv(paste("absence data all variables points ", randomradius, " km.csv", sep=""), header=T)
-
-present <- rename(present, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
-
-absent <- rename(absent, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
-
-}
+present <- read.csv("presence data all variables points all with country data.csv", header=T)
+absent <- read.csv(paste("absence data all variables points all with country data ", randomradius, " km.csv", sep=""), header=T)
 
 
-####==== IMPORT POLYGON DATA ====####
+### without at sea country data and correct country points for absences
 
-if (!points) {
-  
-  setwd(paste(datawd, "/data for analysis/", sep=""))
-  present <- read.csv("presence data all variables.csv", header=T)
-  absent <- read.csv("absence data all variables.csv", header=T)
-  
-  # # combining habitats artificial, bareland, water into "unsuitable" category
-  # unsuitable <- rowSums(present[,c("artificial","bare_land","wetland_water")])
-  # present.new <- data.frame(present[,1:12],unsuitable,present[,13:23])
-  # present.new <- present.new[,-(c(8,9,12))]
-  
-  # unsuitable <- rowSums(absent[,c("artificial","bare_land","wetland_water")])
-  # absent.new <- data.frame(absent[,1:12],unsuitable,absent[,13:24])
-  # absent.new <- absent.new[,-(c(8,9,12))]
-  
-  # absentsplit <- split(absent, as.factor(absent$random.scale))
-  # 
-  
-  habitatvarnames <- c("agriculture","forest","scrub.grassland","unsuitable","wetland.water")
-  
-}
+# setwd(paste(datawd, "/data for analysis/", sep=""))
+# present2 <- read.csv("presence data all variables points.csv", header=T)
+# absent2 <- read.csv(paste("absence data all variables points ", randomradius, " km.csv", sep=""), header=T)
+
+# present <- rename(present, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
+# 
+# absent <- rename(absent, c("LAND.CLASS_agriculture"="agriculture", "LAND.CLASS_forest"="forest", "LAND.CLASS_scrub.grassland"="scrub.grassland","LAND.CLASS_unsuitable"="unsuitable", "LAND.CLASS_wetland.water"="wetland.water"))
+
 
 
 ####################################################
@@ -207,7 +182,11 @@ alldata <- rbind(newpresent, newabsent)
 
 alldata.LOS <- rbind(present.LOS, absent.LOS)
 
-
+# plotLOSdat <- alldata.LOS[alldata.LOS$presence==1,c("name","mgroup","LOS")]
+# 
+# plotLOSdat2 <- unique(plotLOSdat)
+# 
+# hist(plotLOSdat2$LOS)
 ####===========	PROTECTED AREA AND HABITAT USE EFFECT ON PRESENCE/ABSENCE ==============####
 
 #### NOTES ####
@@ -215,6 +194,21 @@ alldata.LOS <- rbind(present.LOS, absent.LOS)
 #   **** co-linearity is less of an issue now because habitat is coded as a categorical variable
 # Have not yet included designation level as an explanatory variable since analysis would need to be conducted on a subset of data (only stopovers which overlap with PAs); otherwise NAs are introduced and models do not include the same number of observations)
 # Initial analysis to include all sites, subsequent analysis may investigate the effect of designation level on use and interaction with habitat using only sites which intersect with Protected Areas
+
+#### ---- MODEL DATASET - reclassifying SE/SW according to country rather than departure route to Africa ---- ####
+
+
+fulldat <- with(alldata.LOS, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, country=usecountry))
+
+dat.route <- subset(fulldat, strat==route)
+dat.route <- droplevels(dat.route)
+
+# datSE <- subset(fulldat, strat=="SE")
+# datSE <- droplevels(datSE)
+
+# datSW <- subset(fulldat, strat=="SW")
+# datSW <- droplevels(datSW)
+
 
 
 #### ---- MODEL DATASET ---- ####
@@ -410,10 +404,39 @@ newdat2 <- data.frame(newdat, pred, pred.CI)
 ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (SW) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(axis.title.x = element_text(face="bold", size=16, vjust=0.1), axis.text.x = element_text(size=12), axis.title.y = element_text(face="bold", size=16, vjust=0.9), axis.text.y = element_text(size=12, vjust=0.5), legend.text=element_text(size=14), legend.title=element_text(size=14))
 
 setwd(paste(outputwd, "/GLMM results/", sep=""))
-ggsave("top model interaction plot 50km SW with error bars.jpg")
+ggsave("top model elevation plot 50km SW.jpg")
 
 # interaction.plot(newdat$habitat, newdat$PA, newdat$prob, xlab="Habitat", ylab=c"Predicted Probability", trace.label=c("PA"))
 #title("Predicted probability of presence (SW) at mean elevation and mean climate values, 200km")
+
+############## ELEVATION SW
+
+elevationseq <- seq(min(datSW$elevation), max(datSW$elevation), 0.01)
+newdat <- data.frame(elevation=elevationseq, habitat=rep(levels(datSW$habitat), each=length(elevationseq)), PA=rep(levels(datSW$PA), each=length(elevationseq)*length(levels(datSW$habitat))) , spei.Mar=mean(datSW$spei.Mar), spei.Aug=mean(datSW$spei.Aug))
+
+pred <- predict(SWmodels[[20]], newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(SWmodels[[20]], newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+qplot(x=elevation, y=pred, data=newdat2, geom="point", colour=habitat, shape=PA, size=2)
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("top model elevation plot 50km SW.jpg")
+
+############## climate SW
+climateseq <- seq(min(datSW$spei.Aug), max(datSW$spei.Aug), 0.01)
+newdat <- data.frame(spei.Aug=climateseq, habitat=rep(levels(datSW$habitat), each=length(climateseq)), PA=rep(levels(datSW$PA), each=length(climateseq)*length(levels(datSW$habitat))) , elevation=mean(datSW$elevation), spei.Mar=mean(datSW$spei.Mar))
+
+pred <- predict(SWmodels[[20]], newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(SWmodels[[20]], newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+qplot(x=spei.Aug, y=pred, data=newdat2, geom="point", colour=habitat, shape=PA, size=2)
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("top model summer SPEI plot 50km SW.jpg")
 
 ### SE cuckoos
 newdat <- data.frame(habitat=levels(datSE$habitat), PA=rep(levels(datSE$PA), 5), elevation=mean(datSE$elevation), spei.Mar=mean(datSE$spei.Mar), spei.Aug=mean(datSE$spei.Aug))
@@ -432,6 +455,35 @@ ggsave("top model interaction plot 50km SE with error bars.jpg")
 #title("Predicted probability of presence (SE) at mean elevation and mean climate values, 200km")
 
 
+############## ELEVATION SE
+
+elevationseq <- seq(min(datSE$elevation), max(datSE$elevation), 0.01)
+newdat <- data.frame(elevation=elevationseq, habitat=rep(levels(datSE$habitat), each=length(elevationseq)), PA=rep(levels(datSE$PA), each=length(elevationseq)*length(levels(datSE$habitat))) , spei.Mar=mean(datSE$spei.Mar), spei.Aug=mean(datSE$spei.Aug))
+
+pred <- predict(SEmodels[[20]], newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(SEmodels[[20]], newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+qplot(x=elevation, y=pred, data=newdat2, geom="point", colour=habitat, shape=PA, size=2)
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("top model elevation plot 50km SE.jpg")
+
+
+############## climate SE
+climateseq <- seq(min(datSE$spei.Mar), max(datSE$spei.Mar), 0.01)
+newdat <- data.frame(spei.Mar=climateseq, habitat=rep(levels(datSE$habitat), each=length(climateseq)), PA=rep(levels(datSE$PA), each=length(climateseq)*length(levels(datSE$habitat))) , elevation=mean(datSE$elevation), spei.Aug=mean(datSE$spei.Aug))
+
+pred <- predict(SEmodels[[20]], newdata=newdat, type="response", re.form=NA)
+pred.CI <- data.frame(easyPredCI(SEmodels[[20]], newdat))
+
+newdat2 <- data.frame(newdat, pred, pred.CI)
+
+qplot(x=spei.Mar, y=pred, data=newdat2, geom="point", colour=habitat, shape=PA, size=2)
+
+setwd(paste(outputwd, "/GLMM results/", sep=""))
+ggsave("top model winter SPEI plot 50km SE.jpg")
 ########################################################################
 ########################################################################
 ########################################################################
@@ -617,7 +669,6 @@ ggsave("large countries interaction plot 50km with error bars.jpg")
 
 longstops <- subset(alldata.LOS, LOS >= 10)
 longstops <- droplevels(longstops)
-longstops$LOSlength <- "long"
 
 longstopdat <- with(longstops, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, desig=desiglevel, country))
 
@@ -631,8 +682,27 @@ longstopmodelSW <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug
 
 longstopmodelSE <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=longstopdatSE, family=binomial, control=glmerControl(optimizer="bobyqa"))
 
-summary(longstopmodelSW)
-summary(longstopmodelSE)
+
+setwd(paste(outputwd, "/GLMM results", sep=""))
+
+sink(paste("SW GLMM models long stopovers ", randomradius, " km.txt", sep=""))
+cat("\n########==========  SW MODELS ==========########\n", sep="\n")
+print(longstopmodelSW)
+cat("\n##### CONVERGENCE WARNING degenerate Hessian with 2 negative eigenvalues\n")
+cat("\n########==========  SW MODEL SUMMARIES ==========########\n", sep="\n")
+print(summary(longstopmodelSW))
+
+sink()
+
+sink(paste("SE GLMM models long stopovers ", randomradius, " km.txt", sep=""))
+cat("\n########==========  SE MODELS ==========########\n", sep="\n")
+print(longstopmodelSE)
+cat("\n########==========  SE MODEL SUMMARIES ==========########\n", sep="\n")
+print(summary(longstopmodelSE))
+
+
+sink()
+
 
 #### SW
 
@@ -742,8 +812,26 @@ shortstopmodelSW <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Au
 
 shortstopmodelSE <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=shortstopdatSE, family=binomial, control=glmerControl(optimizer="bobyqa"))
 
-summary(shortstopmodelSW)
-summary(shortstopmodelSE)
+setwd(paste(outputwd, "/GLMM results", sep=""))
+
+sink(paste("SW GLMM models short stopovers ", randomradius, " km.txt", sep=""))
+cat("\n########==========  SW MODELS ==========########\n", sep="\n")
+print(shortstopmodelSW)
+cat("\n##### CONVERGENCE WARNING degenerate Hessian with 2 negative eigenvalues\n")
+cat("\n########==========  SW MODEL SUMMARIES ==========########\n", sep="\n")
+print(summary(shortstopmodelSW))
+
+sink()
+
+sink(paste("SE GLMM models short stopovers ", randomradius, " km.txt", sep=""))
+cat("\n########==========  SE MODELS ==========########\n", sep="\n")
+print(shortstopmodelSE)
+cat("\n########==========  SE MODEL SUMMARIES ==========########\n", sep="\n")
+print(summary(shortstopmodelSE))
+
+
+sink()
+
 
 #### SW
 
@@ -833,11 +921,42 @@ ggsave("short stopovers SE interaction plot 50km with error bars.jpg")
 ########################################################################
 
 
-####===========  LAST STOPOVERS ONLY ==============####
+####===========  LAST STOPOVERS ONLY - only birds that attempted Sahara crossing ==============####
 
 #### ---- MODEL DATASET ---- ####
 
-finalstops <- subset(alldata, laststop=="Y")
+### Convert Sahara success yes/no into integer 1/0
+
+#saharasuc <- subset(alldata.LOS, presence==1 & laststop=="Y")
+saharasuc <- subset(alldata.LOS, presence==1)
+
+
+saharasuc$Sahara.success <- as.numeric(as.character(revalue(saharasuc$Sahara.success, c("Y"=1, "N"=0))))
+
+## add a variable for whether Sahara crossing was attempted or not (ie. remove birds that failed before attempting)
+setwd(datawd)
+othervar <- read.csv("cuckoo migratory strategy and Sahara crossing success.csv", header=TRUE)
+
+attemptSahara <- with(othervar, data.frame(name, attemptSahara=attempted.Sahara.crossing))
+
+attemptdat <- merge(saharasuc, attemptSahara)
+
+attemptdat <- subset(attemptdat, attemptSahara=="Y")
+attemptdat <- droplevels(attemptdat)
+
+saharadat <- with(attemptdat, data.frame(success=Sahara.success, name, year, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=elevation.m, spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, desig=desiglevel, country, laststop, attemptSahara, LOS))
+
+######################################################
+
+## add a variable for whether Sahara crossing was attempted or not (ie. remove birds that failed before attempting)
+setwd(datawd)
+othervar <- read.csv("cuckoo migratory strategy and Sahara crossing success.csv", header=TRUE)
+
+attemptSahara <- with(othervar, data.frame(name, attemptSahara=attempted.Sahara.crossing))
+
+attemptdat <- merge(alldata, attemptSahara)
+
+finalstops <- subset(attemptdat, laststop=="Y")
 finalstops <- droplevels(finalstops)
 
 finalstopdat <- with(finalstops, data.frame(presence, name, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=rescale(elevation.m), spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, desig=desiglevel, country, laststop))
@@ -852,8 +971,26 @@ finalstopmodelSW <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Au
 
 finalstopmodelSE <- glmer(presence ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=finalstopdatSE, family=binomial, control=glmerControl(optimizer="bobyqa"))
 
-summary(finalstopmodelSW)
-summary(finalstopmodelSE)
+setwd(paste(outputwd, "/GLMM results", sep=""))
+
+sink(paste("SW GLMM models final stopovers Sahara attempts ", randomradius, " km.txt", sep=""))
+cat("\n########==========  SW MODELS ==========########\n", sep="\n")
+print(finalstopmodelSW)
+cat("\n########==========  SW MODEL SUMMARIES ==========########\n", sep="\n")
+print(summary(finalstopmodelSW))
+
+sink()
+
+sink(paste("SE GLMM models final stopovers Sahara attempts ", randomradius, " km.txt", sep=""))
+cat("\n########==========  SE MODELS ==========########\n", sep="\n")
+print(finalstopmodelSE)
+cat("\n########==========  SE MODEL SUMMARIES ==========########\n", sep="\n")
+print(summary(finalstopmodelSE))
+
+
+sink()
+
+
 
 #### SW
 
@@ -883,7 +1020,7 @@ pred.CI <- data.frame(easyPredCI(finalstopmodelSW, newdat))
 
 newdat2 <- data.frame(newdat, pred, pred.CI)
 
-ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (FINAL stopovers, SW) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (FINAL stopovers, Sahara attempts, SW) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
   axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
   axis.text.x = element_text(size=12), 
   axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
@@ -894,7 +1031,7 @@ ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr,
 )
 
 setwd(paste(outputwd, "/GLMM results/", sep=""))
-ggsave("final stopovers SW interaction plot 50km with error bars.jpg")
+ggsave("final stopovers Sahara attempts SW interaction plot 50km with error bars.jpg")
 
 
 #### SE
@@ -925,7 +1062,7 @@ pred.CI <- data.frame(easyPredCI(finalstopmodelSE, newdat))
 
 newdat2 <- data.frame(newdat, pred, pred.CI)
 
-ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (FINAL stopovers, SE) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
+ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of presence (FINAL stopovers, Sahara attempts, SE) at mean elevation and mean climate values, 50km", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
   axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
   axis.text.x = element_text(size=12), 
   axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
@@ -936,4 +1073,258 @@ ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr,
 )
 
 setwd(paste(outputwd, "/GLMM results/", sep=""))
-ggsave("final stopovers SE interaction plot 50km with error bars.jpg")
+ggsave("final stopovers Sahara attempts SE interaction plot 50km with error bars.jpg")
+
+
+########################################################################
+########################################################################
+########################################################################
+
+
+####===========  SAHARA CROSSING ==============####
+
+#### ---- MODEL DATASET ---- ####
+
+### Convert Sahara success yes/no into integer 1/0
+
+#saharasuc <- subset(alldata.LOS, presence==1 & laststop=="Y")
+saharasuc <- subset(alldata.LOS, presence==1)
+
+
+saharasuc$Sahara.success <- as.numeric(as.character(revalue(saharasuc$Sahara.success, c("Y"=1, "N"=0))))
+
+## add a variable for whether Sahara crossing was attempted or not (ie. remove birds that failed before attempting)
+setwd(datawd)
+othervar <- read.csv("cuckoo migratory strategy and Sahara crossing success.csv", header=TRUE)
+
+attemptSahara <- with(othervar, data.frame(name, attemptSahara=attempted.Sahara.crossing))
+
+attemptdat <- merge(saharasuc, attemptSahara)
+
+attemptdat <- subset(attemptdat, attemptSahara=="Y")
+attemptdat <- droplevels(attemptdat)
+
+saharadat <- with(attemptdat, data.frame(success=Sahara.success, name, year, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=elevation.m, spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, desig=desiglevel, country, laststop, attemptSahara, LOS))
+
+### Convert point data to observations summarizing the final stopover
+
+### habitat
+
+bybird <- split(saharadat, list(saharadat$name))
+
+bybird2 <- lapply(bybird, function(x) {x$mgroup <- droplevels(x$mgroup); return(x)})
+
+habitatsum <- lapply(bybird2, function(x) prop.table(table(x$mgroup, x$habitat)))
+
+### PA: proportion of points in mgroup overlapping with PA, if no overlap (100% of points are a N), then classify that mgroup as a N for PAoverlap
+PAsum <- lapply(bybird2, function(x) prop.table(table(x$mgroup, x$PA), 1))
+PA.YN <- lapply(PAsum, function(x) revalue(as.factor(x[,1] == 1), c("TRUE"="N", "FALSE"="Y"))) # identifies as TRUE mgroups which have 100% of points in the "No PA overlap" column
+
+### elevation
+meanelevation <- lapply(bybird2, function(x) tapply(x$elevation, x$mgroup, mean))
+
+### climate
+
+mean.spei.Mar <- lapply(bybird2, function(x) tapply(x$spei.Mar, x$mgroup, mean))
+mean.spei.Aug <- lapply(bybird2, function(x) tapply(x$spei.Aug, x$mgroup, mean))
+
+### success
+success <- lapply(bybird2, function(x) prop.table(table(x$year, x$success), 1))
+
+### LOS
+LOS <- lapply(bybird2, function(x) tapply(x$LOS, x$mgroup, mean))
+
+
+names <- do.call(rbind, lapply(bybird2, function(x) data.frame(name=levels(droplevels(x$name)), mgroup=levels(x$mgroup))))
+
+fulldat <- data.frame(names, do.call(rbind, habitatsum), PA=unlist(PA.YN), elevation=unlist(meanelevation), spei.Mar=unlist(mean.spei.Mar), spei.Aug=unlist(mean.spei.Aug), year=unlist(lapply(success, rownames)), success=unlist(lapply(success, function(x) x[,2])), LOS=unlist(LOS))
+
+m1 <- glmer(success ~ rescale(elevation) + (1|name), data=fulldat, family=binomial)
+
+
+# saharamodels <- list()
+# 
+# saharamodels[[1]] <- glmer(success ~ PA*habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=saharadat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# 
+# saharamodels[[2]] <- glmer(success ~ PA + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=saharadat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# 
+# saharamodels[[3]] <- glmer(success ~ habitat + elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=saharadat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# 
+# saharamodels[[4]] <- glmer(success ~ elevation + spei.Mar + spei.Aug + (1|name/mgroup/id), data=saharadat, family=binomial, control=glmerControl(optimizer="bobyqa"))
+# 
+# 
+# tapply(saharasuc$elevation.m, list(as.factor(saharasuc$Sahara.success)), mean)
+# 
+# newdat <- data.frame(elevation=seq(min(saharadat$elevation), max(saharadat$elevation), by=0.001), spei.Mar=mean(saharadat$spei.Mar), spei.Aug=mean(saharadat$spei.Aug))
+# 
+# ### Ben Bolker's population-level GLMM CI prediction function
+# easyPredCI <- function(model,newdata,alpha=0.05) {
+#   ## baseline prediction, on the linear predictor (logit) scale:
+#   pred0 <- predict(model,re.form=NA,newdata=newdata)
+#   ## fixed-effects model matrix for new data
+#   X <- model.matrix(formula(model,fixed.only=TRUE)[-2],
+#                     newdata)
+#   beta <- fixef(model) ## fixed-effects coefficients
+#   V <- vcov(model)     ## variance-covariance matrix of beta
+#   pred.se <- sqrt(diag(X %*% V %*% t(X))) ## std errors of predictions
+#   ## inverse-link (logistic) function: could also use plogis()
+#   linkinv <- model@resp$family$linkinv
+#   ## construct 95% Normal CIs on the link scale and
+#   ##  transform back to the response (probability) scale:
+#   crit <- -qnorm(alpha/2)
+#   linkinv(cbind(lwr=pred0-crit*pred.se,
+#                 upr=pred0+crit*pred.se)) 
+# }
+# 
+# pred <- predict(saharamodels[[4]], newdata=newdat, type="response", re.form=NA)
+# pred.CI <- data.frame(easyPredCI(saharamodels[[4]], newdat))
+# 
+# newdat2 <- data.frame(newdat, pred, pred.CI)
+# 
+# plot(success ~ elevation, saharadat)
+# 
+# 
+# ggplot(newdat2, aes(x=habitat,y=pred, shape=PA, linetype=PA, group=PA, ymin=lwr, ymax=upr)) + geom_point(size=4) + geom_line() + geom_errorbar(width=0.1) + labs(x="Habitat", y="Predicted Probability", title="Predicted probability of successful Sahara crossing", size=4) + scale_x_discrete("Habitat", labels = c("scrub.grassland"="scrub/grassland", "wetland.water"="wetland/water")) + theme(
+#   axis.title.x = element_text(face="bold", size=16, vjust=0.1), 
+#   axis.text.x = element_text(size=12), 
+#   axis.title.y = element_text(face="bold", size=16, vjust=0.9), 
+#   axis.text.y = element_text(size=12, vjust=0.5),
+#   strip.text.x = element_text(size=14, face="bold"),
+#   legend.text=element_text(size=14), 
+#   legend.title=element_text(size=14)
+# )
+# 
+# setwd(paste(outputwd, "/GLMM results/", sep=""))
+# ggsave("final stopovers SW interaction plot 50km with error bars.jpg")
+
+
+####===========  STOPOVER DURATION AS A FUNCTION OF HABITAT + PA ==============####
+
+#### ---- MODEL DATASET ---- ####
+
+stopdat <- subset(alldata.LOS, presence==1)
+
+usedat <- with(stopdat, data.frame(LOS, name, year, mgroup=as.factor(mgroup), id=as.factor(id), strat=strategy, elevation=elevation.m, spei.Mar, spei.Aug, PA=PAoverlap, habitat=LAND.CLASS, desig=desiglevel, country, laststop))
+
+### Convert point data to observations summarizing stopovers
+
+### habitat
+
+bybird <- split(usedat, list(usedat$name))
+
+bybird2 <- lapply(bybird, function(x) {x$mgroup <- droplevels(x$mgroup); return(x)})
+
+habitatsum <- lapply(bybird2, function(x) prop.table(table(x$mgroup, x$habitat), 1))
+
+### PA: proportion of points in mgroup overlapping with PA, if no overlap (100% of points are a N), then classify that mgroup as a N for PAoverlap
+PAsum <- lapply(bybird2, function(x) prop.table(table(x$mgroup, x$PA), 1))
+PA.YN <- lapply(PAsum, function(x) revalue(as.factor(x[,1] == 1), c("TRUE"="N", "FALSE"="Y"))) # identifies as TRUE mgroups which have 100% of points in the "No PA overlap" column
+
+### elevation
+meanelevation <- lapply(bybird2, function(x) tapply(x$elevation, x$mgroup, mean))
+
+### climate
+
+mean.spei.Mar <- lapply(bybird2, function(x) tapply(x$spei.Mar, x$mgroup, mean))
+mean.spei.Aug <- lapply(bybird2, function(x) tapply(x$spei.Aug, x$mgroup, mean))
+
+### LOS
+LOS <- lapply(bybird2, function(x) tapply(x$LOS, x$mgroup, mean))
+
+### year
+year <- lapply(bybird2, function(x) tapply(x$year, x$mgroup, mean))
+
+### put all data together
+names <- do.call(rbind, lapply(bybird2, function(x) data.frame(name=levels(droplevels(x$name)), mgroup=levels(x$mgroup))))
+
+fulldat <- data.frame(names, do.call(rbind, habitatsum), PA=unlist(PA.YN), elevation=unlist(meanelevation), spei.Mar=unlist(mean.spei.Mar), spei.Aug=unlist(mean.spei.Aug), year=unlist(year), LOS=unlist(LOS))
+
+LOSdat <- data.frame(lapply(fulldat, function(y) if(is.numeric(y)) round(y, 3) else y))
+
+LOSdat2 <- data.frame(LOSdat, sqrtLOS=sqrt(LOSdat$LOS))
+
+###======== COLLINEARITY ========###
+
+### explore collinearity of continuous explanatory variables
+exp.cont <- LOSdat2[,c(3:7,9:11)]
+
+#exp.cont <- alldata[,c("agriculture","forest","scrub_grassland","unsuitable","precip.mm.winter","temp.C.winter","precip.mm.spring","temp.C.spring","elevation.m")]
+
+source(paste(parentwd,"/scripts/Zuur_functions.r", sep=""))
+# for 6 habitat categories
+
+pairs(exp.cont, lower.panel=panel.cor, panel=panel.smooth)
+
+habpc <- LOSdat2[,3:7]
+
+model <- prcomp(habpc,scale=TRUE)
+biplot(model)
+summary(model)
+model
+pc1<-predict(model)[,1] # predicted values of PC1 (agriculture component)
+pc2 <- predict(model)[,2] # predicted valeus of PC2 (wetland + unsuitable component)
+pc3 <- predict(model)[,3] # forest/scrub component
+
+LOSdat2 <- data.frame(LOSdat2, pc1, pc2, pc3)
+
+LOSmodels <- list()
+
+LOSmodels[[1]] <- lmer(sqrtLOS ~ 1 + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[2]] <- lmer(sqrtLOS ~ PA + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[3]] <- lmer(sqrtLOS ~ elevation + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[4]] <- lmer(sqrtLOS ~ spei.Mar + spei.Aug + (1|name), data=LOSdat2, REML=FALSE)
+
+LOSmodels[[5]] <- lmer(sqrtLOS ~ forest + scrub.grassland + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[6]] <- lmer(sqrtLOS ~ agriculture + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[7]] <- lmer(sqrtLOS ~ wetland.water + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[8]] <- lmer(sqrtLOS ~ forest + scrub.grassland + wetland.water + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[9]] <- lmer(sqrtLOS ~ agriculture + forest + scrub.grassland + wetland.water + unsuitable + (1|name), data=LOSdat2, REML=FALSE)
+
+
+LOSmodels <- list()
+
+LOSmodels[[1]] <- lmer(sqrtLOS ~ 1 + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[2]] <- lmer(sqrtLOS ~ PA + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[3]] <- lmer(sqrtLOS ~ elevation + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[4]] <- lmer(sqrtLOS ~ spei.Mar + spei.Aug + (1|name), data=LOSdat2, REML=FALSE)
+
+LOSmodels[[5]] <- lmer(sqrtLOS ~ pc1 + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[6]] <- lmer(sqrtLOS ~ pc2 + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[7]] <- lmer(sqrtLOS ~ pc3 + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[8]] <- lmer(sqrtLOS ~ pc1 + pc2 + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[9]] <- lmer(sqrtLOS ~ pc1 + pc3 + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[10]] <- lmer(sqrtLOS ~ pc2 + pc3 + (1|name), data=LOSdat2, REML=FALSE)
+LOSmodels[[11]] <- lmer(sqrtLOS ~ pc1 + pc2 + pc3 + (1|name), data=LOSdat2, REML=FALSE)
+
+
+
+### AIC function
+calculate.AIC<-function(aictable,modellist) {
+  modelnames <- modellist
+  delta.aic <- aictable$AIC-min(aictable$AIC)
+  lik.aic <- exp(-delta.aic/2)
+  aic.w <- lik.aic/(sum(lik.aic))
+  aic.table <- data.frame(modelnames,aictable,delta.aic,lik.aic,aic.w)
+}
+
+m <- LOSmodels
+
+# models <- m[-(which(sapply(m,is.null),arr.ind=TRUE))] # need this line if leaving out models so that list of models has NULL values
+
+# assign models in list m names m1, m2, m3, etc (m1 = m[[1]], m2 = m[[2]])
+for (i in 1:length(m)) {
+  assign(paste("m", i, sep=""), m[[i]])
+}
+
+modelsummary <- lapply(m, summary)
+names(modelsummary) <- rep(paste("m", 1:length(m), sep=""))
+AICoutput <- AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+                 #,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m18,m19,m20,m21,m22)
+modellist <- lapply(m, formula)
+output <- calculate.AIC(AICoutput, as.character(modellist))
+aic.ordered<-output[rev(order(output$aic.w)),]
+output <- aic.ordered
+output[,3:6] <- round(output[,c(3:6)], digits = 3)
+output
+
+plot(sqrt(LOS) ~ wetland.water, data=LOSdat2)

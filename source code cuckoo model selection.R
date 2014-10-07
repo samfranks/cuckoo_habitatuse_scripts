@@ -6,14 +6,7 @@
 #  21 August 2014
 #
 ########################################################################################
-
-### change to FALSE to load SE model results, change randomradius to load 200km scale results
-# SW <- FALSE
-# randomradius <- 50
-
-#if (SW) load(paste("~/Git/cuckoos/SW ", randomradius, "km models 20140821.RData", sep=""))
-#if (!SW) load(paste("~/Git/cuckoos/SE ", randomradius, "km models 20140821.RData", sep=""))
-
+  
 ### AIC function
 calculate.AIC<-function(aictable,modellist) {
   modelnames <- modellist
@@ -23,8 +16,20 @@ calculate.AIC<-function(aictable,modellist) {
   aic.table <- data.frame(modelnames,aictable,delta.aic,lik.aic,aic.w)
 }
 
-if (SW) m <- SWmodels
-if (!SW) m <- SEmodels
+### Capture warnings and errors from models
+# myTryCatch <- function(expr) {
+#   warn <- err <- NULL
+#   value <- withCallingHandlers(
+#     tryCatch(expr, error=function(e) {
+#       err <<- e
+#       NULL
+#     }), warning=function(w) {
+#       warn <<- w
+#       invokeRestart("muffleWarning")
+#     })
+#   list(value=value, warning=warn, error=err)
+# }
+
 
 # models <- m[-(which(sapply(m,is.null),arr.ind=TRUE))] # need this line if leaving out models so that list of models has NULL values
 
@@ -34,37 +39,39 @@ for (i in 1:length(m)) {
 }
 
 modelsummary <- lapply(m, summary)
-names(modelsummary) <- rep(paste("m", 1:22, sep=""))
-AICoutput <- AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m18,m19,m20,m21,m22)
+names(modelsummary) <- rep(paste("m", 1:length(m), sep=""))
+names(m) <- rep(paste("m", 1:length(m), sep=""))
+
+### capture warning messages
+# modelsummary.withwarn <- lapply(m, function(x) myTryCatch(summary(x))) # uses tryCatch() function
+warningmessages <- lapply(m, function(x) slot(x, "optinfo")$conv$lme4$messages)
+                                           
+# AICoutput <- AIC(m1,m2)
+# AICoutput <- AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m18,m19,m20,m21)
+
+AICoutput <- AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m18,m19,m20,m21,m22,m23,m24,m25,m26,m27,m28)
 modellist <- lapply(m, formula)
 output <- calculate.AIC(AICoutput, as.character(modellist))
 aic.ordered<-output[rev(order(output$aic.w)),]
 output <- aic.ordered
 output[,3:6] <- round(output[,c(3:6)], digits = 3)
 
-# setwd(paste(outputwd, "/GLMM results", sep=""))
-# if (SW) write.csv(output, paste("SW models AIC output ", randomradius, "km.csv"))
-# if (!SW) write.csv(output, paste("SE models AIC output ", randomradius, "km.csv"))
-# 
-# 
-# if (SW){
-#   sink(paste("SW GLMM models ", randomradius, " km.txt", sep=""))
-#   cat("########==========  SW MODELS AIC OUTPUT ==========########\n", sep="\n")
-#   print(output)
-#   cat("\n########==========  SW MODELS ==========########\n", sep="\n")
-#   print(m)
-#   cat("\n########==========  SW MODEL SUMMARIES ==========########\n", sep="\n")
-#   print(modelsummary)
-# }
-# 
-# if (!SW) {
-#   sink(paste("SE GLMM models ", randomradius, " km.txt", sep=""))
-#   cat("\n########==========  SE MODELS AIC OUTPUT ==========########\n", sep="\n")
-#   print(output)
-#   cat("\n########==========  SE MODELS ==========########\n", sep="\n")
-#   print(m)
-#   cat("\n########==========  SE MODEL SUMMARIES ==========########\n", sep="\n")
-#   print(modelsummary)
-# }
-# 
-# sink()
+topmodel <- m[[rownames(output)[1]]]
+
+setwd(outputwd)
+
+write.csv(output, paste(analysistype, route, randomradius, "km models AIC table output.csv", sep=" "))
+
+sink(paste(analysistype, route, randomradius, "km models.txt", sep=" "))
+cat("########==========  ", route, " ", analysistype, " ", randomradius, " km MODELS AIC OUTPUT ==========########\n\n", sep="")
+print(output)
+cat("\n########==========  TOP MODEL PARAMETER TABLE ==========########\n", sep="\n")
+print(formula(topmodel))
+print(summary(topmodel)$coef)
+cat("\n########==========  MODEL SUMMARIES ==========########\n", sep="\n")
+print(modelsummary)
+cat("\n########==========  WARNING MESSAGES ==========########\n", sep="\n")
+print(warningmessages)
+
+sink()
+
