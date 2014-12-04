@@ -10,16 +10,20 @@
 #     - different colours for each individual
 #
 # 12 Feb 2014
+# 28 Nov 2014 - updated to include 2014 cohort of birds
 #	Samantha Franks
 #	
 #
 ##########################################################
 
+
+######-------------------   NOTES -----------------##########
+# longs and lats from Movebank are in WGS84 GCS
+
 rm(list=ls())
 
 ### Load packages
 
-library(adehabitat) # 
 library(sp) # converts R dataframes into spatially explicit dta
 library(maptools) # allows import of shapefiles into R
 library(rgdal)
@@ -27,16 +31,24 @@ library(rgdal)
 library(rgeos)
 library(raster)
 library(geosphere)
-library(adehabitatHR)
 library(rworldmap) # getMap function
 library(rworldxtra)
-library(NCStats)
+library(reshape)
+library(plyr)
+library(dismo)
+
+options(scipen=6)
 
 ### -------- Working directories --------- ###
 
-datawd <- c("C:/Users/samf/Documents/Git/cuckoos/data")
+Mac <- FALSE
 
-outputwd <- ("C:/Users/samf/Documents/Git/cuckoos/output/Chris Hewson maps")
+if (!Mac) parentwd <- parentwd <- c("C:/Users/samf/Documents/Git/cuckoos")
+if (Mac) parentwd <- c("/Volumes/SAM250GB/BTO PC Documents/Git/cuckoos")
+
+datawd <- paste(parentwd, "data", sep="/")
+scriptswd <- paste(parentwd, "scripts", sep="/")
+outputwd <- paste(parentwd, "output", "Chris Hewson maps", sep="/")
 
 ##################################################################
 #
@@ -73,95 +85,94 @@ EurAfrmap <- crop(Eur.Afr,clipEurAfr)
 
 setwd(datawd)
 
-cuckoo <- read.csv("Chris Hewson maps_all cuckoos best location data_05022014.csv", header=T)
+### which dataset to use
+# cuckoo <- read.csv("Chris Hewson maps_all cuckoos best location data_05022014.csv", header=T) # data used for map production Feb 2014
+d <- read.csv("BTO Cuckoo migration study_Movebank_20141128.csv", header=T) # data to use for map production 28/11/2014, includes 2014 cohort, uses data downloaded straight from Movebank as .csv without any other formatting
 
-cuckoo2 <- read.csv("all cuckoos_best locations_20140331.csv", header=T)
-lloyd2 <- subset(cuckoo2, individual.local.identifier=="Lloyd")
-lloyd2 <- droplevels(lloyd2)
+# remove Wistman, Karma, New Forest 1 (these don't get out of UK)
+rm.names <- c("Wistman","Karma","New Forest 1")
 
-strategy.dat <- read.csv("cuckoo migratory strategy.csv", header=T)
+# run source code to add dates, calculate distances, movement groups and movement types
+# needs to be passed an object called "d"
+# produces object called "fulloriginal"
+source(paste(scriptswd, "cuckoo Movebank data tidying source_new data 2014.R", sep="/"))
 
-###### ADD MOVEMENT TYPE + MOVEMENT GROUP ######
+# run source code to calculate stopover duration
+# needs to be passed an object called "present.date", which has a variable called datetime (of class chron), and which is ordered according to name, then by date
+# outputs an object called present.LOS (the dataset with a new column with stopover duration calculated)
+# also outputs an object called LOStable.ref, which is a quick reference table with each individual's mgroup and corresponding stopover duration
+present.date <- fulloriginal[order(fulloriginal$name, fulloriginal$datetime),]
+source(paste(scriptswd, "source code to add stopover duration data for analysis.R", sep="/"))
 
-### --- MOVEMENT GROUPS --- ###
+setwd(datawd)
+# add some extra data about migration strategy
+strategy.dat <- read.csv("cuckoo migratory strategy and Sahara crossing success 2014.csv", header=T)
+strategy.dat <- subset(strategy.dat, select=c("name2","year.tagged","migratory.strategy","number.of.years","successful.Sahara.crossing"))
+strategy.dat <- rename(strategy.dat, c("name2"="name", "migratory.strategy"="strat","number.of.years"="no.yrs", "successful.Sahara.crossing"="Sahara.success"))
+# strategy.dat <- subset(strategy.dat, name!="Idemili" & name!="Karma" & name!="Wistman")
 
-mgroup <- rep(NA,nrow(cuckoo))
+# merge migration strategy info with bird data
+fulldat <- merge(present.LOS, strategy.dat, by="name")
 
-for (n in 1:nrow(cuckoo)){
-  if (is.na(cuckoo$distance[n])) {
-    mgroup[n] <- 1
-  } else if (cuckoo$distance[n] <= 25) {
-    mgroup[n] <- mgroup[n-1]
-  } else {mgroup[n] <- mgroup[n-1] + 1}
-}
+# cuckoo2 <- read.csv("all cuckoos_best locations_20140331.csv", header=T)
+# lloyd2 <- subset(cuckoo2, individual.local.identifier=="Lloyd")
+# lloyd2 <- droplevels(lloyd2)
 
-### --- MOVEMENT TYPES --- ###
-
-mtype <- rep(NA, nrow(cuckoo))
-
-for (n in 1:nrow(cuckoo)){
-  if (is.na(cuckoo$distance[n])) {
-    mtype[n] <- "C"
-  } else if (mgroup[n] != mgroup[n-1] & mgroup[n] != mgroup[n+1]) {
-    mtype[n] <- "M"
-  } else {
-    mtype[n] <- "S"
-  }
-}
-
-completedata <- data.frame(cuckoo,mgroup,mtype)
-
-newcuckoo <- with(completedata, data.frame(id, name, event.id, timestamp, year, month, day, hour, julian, duration.days, duration.hrs, long.WGS84, lat.WGS84, direction, distance, mgroup, mtype))
-
-newcuckoo$year <- as.factor(newcuckoo$year)
-newcuckoo$mgroup <- as.factor(newcuckoo$mgroup)
-
-###--- remove birds with no mig strategy
-
-# remove Karma (no migratory strategy)
-newcuckoo <- Subset(newcuckoo, name!="Karma")
 
 ###--- Autumn only ---###
 
-autumnonly <- Subset(newcuckoo, julian >= 131 & julian <=356)
+juliandate <- as.numeric()
+
+# cannot get julian() to work as a function on each row and spit out the right value, so for now is written as a slow loop!
+for (i in 1:nrow(fulldat)) {
+  juliandate[i] <- julian(x=months(fulldat$datetime[i]), d=days(fulldat$datetime[i]), y=years(fulldat$datetime[i]), c(day=1, month=1, year=years(fulldat$datetime[i])))
+}
+
+fulldat2 <- cbind(fulldat, juliandate)
+
+autumnonly <- subset(fulldat2, juliandate >= 131 & juliandate <=365 )
+# autumnonly <- Subset(fulldat, julian >= 131 & julian <=356)
 # Clip dataset to only southward migration breeding May 10 to Dec 21 (julian >=131 and <=356)
 
-###########################
-########################### test Lloyd
+###--- remove stopover points in Africa in May (Tor 15) ---###
 
-lloyd <- subset(autumnonly, name=="Lloyd")
-lloyd2 <- droplevels(lloyd2)
+remove <- which(autumnonly$name=="Tor" & autumnonly$mgroup==15)
+autumnonly <- autumnonly[-remove,]
 
-coordinates(lloyd2) <- c("long.WGS84","lat.WGS84")
-coordinates(lloyd2) <- c("location.long","location.lat")
+###--- remove very long stopover points in Spain (Jake 42 and 43) ---###
 
-proj4string(lloyd2) <- CRS("+proj=longlat +datum=WGS84")
+remove <- which(autumnonly$name=="Jake" & autumnonly$mgroup >= 42)
+autumnonly <- autumnonly[-remove,]
 
-plot(EurAfrmap)
-plot(lloyd2, col="blue", pch=16, add=T)
+# change Whortle's 2014 autumn migration strategy to SE and name associated to Whortle2
+autumnonly[autumnonly$name=="Whortle" & autumnonly$year=="2014","strat"] <- "SE"
+
+autumnonly$name <- factor(autumnonly$name, levels=c(levels(autumnonly$name), "Whortle 2"))
+autumnonly[autumnonly$name=="Whortle" & autumnonly$year=="2014", "name"] <- "Whortle 2"
 
 ###########################
 ###########################
 
 ###--- No migratory movements ---###
 
-stopovers <- Subset(autumnonly, mtype!="M")
+stopovers <- subset(autumnonly, mtype!="M")
 
-###--- Pull out individuals with multiple years ---###
+###--- Pull out individuals with multiple years & subset data ---###
 
-ind.by.year <- as.data.frame.matrix(table(autumnonly$name, autumnonly$year))
-ind.by.year2 <- data.frame(name=rownames(ind.by.year), ind.by.year)
-rownames(ind.by.year2) <- c(1:29)
+multiyeartable <- ifelse(table(autumnonly$name, autumnonly$year) > 0, 1, 0)
+multiyearnames <- c(names(which(apply(multiyeartable, 1, sum) > 1)), "Whortle", "Whortle 2")
 
-multiyear <- Subset(autumnonly, name=="BB" | name=="Chance" | name=="Chris" | name=="David" | name=="Lyster")
+multiyear <- autumnonly[grep(paste(multiyearnames, collapse="|"), autumnonly$name),]
+multiyear <- droplevels(multiyear)
+multiyear.stopovers <- subset(multiyear, mtype!="M")
+multiyear.stopovers <- droplevels(multiyear.stopovers)
 
-multiyear.stopovers <- Subset(multiyear, mtype!="M")
 
 ###-----------------------------------------------------------###
 #         3. CREATE SPATIAL LINES CONNECTING YEAR *ALL* STOPOVERS
 ###-----------------------------------------------------------###
 
-map2 <- FALSE
+map2 <- TRUE
 
 if (map2 == TRUE) {
   
@@ -183,12 +194,14 @@ for (n in 1:length(forlines)) {
   
   dat <- forlines[[n]]
   dat <- droplevels(dat)
+  dat$year <- as.factor(dat$year)
   
   yearlevel <- levels(dat$year)
+  print(paste(levels(dat$name), length(yearlevel)))
   
   if (length(yearlevel) == 1) {
     
-    line1 <- Line(cbind(dat$long.WGS84, dat$lat.WGS84))
+    line1 <- Line(cbind(dat$long, dat$lat))
     birdlines <- Lines(list(line1), ID = levels(dat$name))
     
   } else if (length(yearlevel) == 2) {
@@ -196,21 +209,33 @@ for (n in 1:length(forlines)) {
     year1 <- dat[dat$year == yearlevel[1],]
     year2 <- dat[dat$year == yearlevel[2],]
     
-    line1 <- Line(cbind(year1$long.WGS84, year1$lat.WGS84))
-    line2 <- Line(cbind(year2$long.WGS84, year2$lat.WGS84))
+    line1 <- Line(cbind(year1$long, year1$lat))
+    line2 <- Line(cbind(year2$long, year2$lat))
     birdlines <- Lines(list(line1,line2), ID = levels(dat$name))
+    
+  } else if (length(yearlevel) == 3) {
+    
+    year1 <- dat[dat$year == yearlevel[1],]
+    year2 <- dat[dat$year == yearlevel[2],]
+    year3 <- dat[dat$year == yearlevel[3],]
+    
+    line1 <- Line(cbind(year1$long, year1$lat))
+    line2 <- Line(cbind(year2$long, year2$lat))
+    line3 <- Line(cbind(year3$long, year3$lat))    
+    birdlines <- Lines(list(line1,line2,line3), ID = levels(dat$name))
     
   } else {
     
     year1 <- dat[dat$year == yearlevel[1],]
     year2 <- dat[dat$year == yearlevel[2],]
     year3 <- dat[dat$year == yearlevel[3],]
+    year4 <- dat[dat$year == yearlevel[4],]
     
-    line1 <- Line(cbind(year1$long.WGS84, year1$lat.WGS84))
-    line2 <- Line(cbind(year2$long.WGS84, year2$lat.WGS84))
-    line3 <- Line(cbind(year3$long.WGS84, year3$lat.WGS84))    
-    birdlines <- Lines(list(line1,line2,line3), ID = levels(dat$name))
-    
+    line1 <- Line(cbind(year1$long, year1$lat))
+    line2 <- Line(cbind(year2$long, year2$lat))
+    line3 <- Line(cbind(year3$long, year3$lat))
+    line4 <- Line(cbind(year4$long, year4$lat)) 
+    birdlines <- Lines(list(line1,line2,line3,line4), ID = levels(dat$name))
   }
   
   allbirdlines[[n]] <- birdlines
@@ -220,8 +245,13 @@ for (n in 1:length(forlines)) {
 line.routes <- SpatialLines(allbirdlines)
 proj4string(line.routes) <- CRS("+proj=longlat +datum=WGS84")
 
-mig.routes <- SpatialLinesDataFrame(line.routes, data.frame(strategy.dat, row.names=levels(autumnonly$name)))
+if (!map2) {
+  mig.routes <- SpatialLinesDataFrame(line.routes, data.frame(unique(autumnonly[,c("name","strat")]), row.names=sapply(slot(line.routes, 'lines'), function(i) slot(i, 'ID'))))
+}
 
+if (map2) {
+  mig.routes <- SpatialLinesDataFrame(line.routes, data.frame(unique(multiyear[,c("name","strat")]), row.names=sapply(slot(line.routes, 'lines'), function(i) slot(i, 'ID'))))
+}
 
 ###-----------------------------------------------------------###
 #         4. CREATE MAIN STOPOVER LOCATION POINTS EACH CUCKOO
@@ -259,10 +289,11 @@ for (n in 1:length(newdat)) {
   
   dat <- newdat[[n]]
   dat <- droplevels(dat)
+  dat$mgroup <- as.factor(dat$mgroup)
   
   centroids <- matrix(data=NA, nrow=length(levels(dat$mgroup)), ncol=3)
     
-  coordinates(dat) <- c("long.WGS84","lat.WGS84")
+  coordinates(dat) <- c("long","lat")
   proj4string(dat) <- CRS("+proj=longlat +datum=WGS84")
   
   for (i in 1:length(levels(dat$mgroup))){
@@ -271,9 +302,14 @@ for (n in 1:length(newdat)) {
     usedat <- dat[dat$mgroup==mgrouplevel,]
     
     if (nrow(usedat) >= 3) {
-      r1 <- rbind(coordinates(usedat),coordinates(usedat[1,]))
-      mg.poly <- Polygon(r1)
-      centroids[i,] <- cbind(mg.poly@labpt[1], mg.poly@labpt[2], as.numeric(mgrouplevel))
+      
+      # place "centroid" point of stopover in the centre of the bbox of the spatial points
+      centroidlong <- bbox(usedat)["long","min"] + ((bbox(usedat)["long","max"]-bbox(usedat)["long","min"])/2)
+      centroidlat <- bbox(usedat)["lat","min"] + ((bbox(usedat)["lat","max"]-bbox(usedat)["lat","min"])/2)
+      
+#       r1 <- rbind(coordinates(usedat),coordinates(usedat[1,]))
+#       mg.poly <- Polygon(r1) # this fails to make a closed polygon for Martin mgroup 11 for some reason, gives ridiculous centroid
+      centroids[i,] <- cbind(centroidlong, centroidlat, as.numeric(mgrouplevel))
       
     } else if (nrow(usedat) == 2) {
       
@@ -288,53 +324,57 @@ for (n in 1:length(newdat)) {
   
   centroids <- data.frame(centroids)
   centroids <- cbind(rep(levels(dat$name), nrow(centroids)), centroids)
-  colnames(centroids) <- c("name", "long.WGS84","lat.WGS84","mgroup")
-  centroids$mgroup <- as.factor(centroids$mgroup)
+  colnames(centroids) <- c("name", "long","lat","mgroup")
   
-  mig.stops[[n]] <- centroids
+  centroids2 <- merge(centroids, unique(dat@data[,c("name","mgroup","LOS","year","strat")]), by=c("name","mgroup"))  
+  centroids2 <- centroids2[order(centroids2$mgroup),]
+    
+  centroids2$mgroup <- as.factor(centroids2$mgroup)
+  
+  mig.stops[[n]] <- centroids2
   
 }
- 
-###-----------------------------------------------------------###
-#         5. ADD STOPOVER DURATION & YEAR TO LOCATION POINTS
-###-----------------------------------------------------------###
 
-# for each cuckoo
-
-fullroute <- list()
-
-for (n in 1:length(newdat)) {
-  
-  dat <- newdat[[n]]
-  dat <- droplevels(dat)
-  dat$mgroup <- as.factor(dat$mgroup)
-  dat$year <- as.factor(dat$year)
-  
-  # for each level of mgroup:
-  #   1. sum duration.days
-  #   2. extract year
-  
-  year.LOS <- data.frame(matrix(NA, nrow=nrow(mig.stops[[n]]), ncol=2, dimnames=list(c(), c("year","LOS"))))
-  
-  for (i in 1:length(levels(dat$mgroup))){
-    
-    mgrouplevel <- levels(dat$mgroup)[i]
-    usedat <- dat[dat$mgroup==mgrouplevel,]
-    usedat <- droplevels(usedat)
-    
-    year <- levels(usedat$year)
-    
-    LOS <- sum(usedat$duration.days, na.rm=TRUE)
-    
-    year.LOS[i,] <- c(year, LOS)
-        
-  }
-  
-  fullroute[[n]] <- data.frame(mig.stops[[n]], year.LOS)
-  fullroute[[n]]$LOS <- as.numeric(fullroute[[n]]$LOS)
-  fullroute[[n]]$year <- as.factor(fullroute[[n]]$year)
-  
-}
+# ###-----------------------------------------------------------###
+# #         5. ADD STOPOVER DURATION & YEAR TO LOCATION POINTS
+# ###-----------------------------------------------------------###
+# 
+# # for each cuckoo
+# 
+# fullroute <- list()
+# 
+# for (n in 1:length(newdat)) {
+#   
+#   dat <- newdat[[n]]
+#   dat <- droplevels(dat)
+#   dat$mgroup <- as.factor(dat$mgroup)
+#   dat$year <- as.factor(dat$year)
+#   
+#   # for each level of mgroup:
+#   #   1. sum duration.days
+#   #   2. extract year
+#   
+#   year.LOS <- data.frame(matrix(NA, nrow=nrow(mig.stops[[n]]), ncol=2, dimnames=list(c(), c("year","LOS"))))
+#   
+#   for (i in 1:length(levels(dat$mgroup))){
+#     
+#     mgrouplevel <- levels(dat$mgroup)[i]
+#     usedat <- dat[dat$mgroup==mgrouplevel,]
+#     usedat <- droplevels(usedat)
+#     
+#     year <- levels(usedat$year)
+#     
+#     LOS <- sum(usedat$duration.days, na.rm=TRUE)
+#     
+#     year.LOS[i,] <- c(year, LOS)
+#         
+#   }
+#   
+#   fullroute[[n]] <- data.frame(mig.stops[[n]], year.LOS)
+#   fullroute[[n]]$LOS <- as.numeric(fullroute[[n]]$LOS)
+#   fullroute[[n]]$year <- as.factor(fullroute[[n]]$year)
+#   
+# }
 
 
 ###-----------------------------------------------------------###
@@ -343,37 +383,39 @@ for (n in 1:length(newdat)) {
 
 # re-concatenate individual bird list elements into a single dataframe with all individuals
 
-allbirds <- do.call(rbind, fullroute) # rbind all list elements
+allbirds <- do.call(rbind, mig.stops) # rbind all list elements
 
-allbirds$LOS <- as.numeric(allbirds$LOS)
-allbirds$year <- as.factor(allbirds$year)
+# allbirds$LOS <- as.numeric(allbirds$LOS)
+# allbirds$year <- as.factor(allbirds$year)
 
 if (map2 == FALSE) {
   # remove stopovers < 3 days
-  remove <- which(allbirds$LOS < 3 & allbirds$mgroup!=1)
+  remove <- which(allbirds$LOS < 3 & allbirds$mgroup!="1")
   longstops <- allbirds[-remove,]
 }
 
 if (map2 == TRUE) {
-  longstops <- allbirds
+#   longstops <- allbirds
+  remove <- which(allbirds$LOS < 3 & allbirds$mgroup!="1")
+  longstops <- allbirds[-remove,]
 }
 
-###--- assign migratory strategy (map 1 only) ---###
-
-if (map2 == FALSE) {
-  
-  migstrategy <- function(name) {
-    if (name=="BB" | name=="Chance" | name=="Chris" | name=="David" | name=="Indy" | name=="Iolo" | name=="Kasper" | name=="Livingstone" | name=="Lloyd" | name=="Martin" | name=="Mungo" | name=="Patch" | name=="Roy" | name=="Sussex" | name=="Sussex" | name=="Tor" | name=="Wallace" | name=="Waller") {
-      strategy <- "SE"
-    } else {
-      strategy <- "SW"
-    }
-    return(strategy)
-  }
-  
-  mig.strategy <- sapply(longstops$name, migstrategy)
-  
-}
+# ###--- assign migratory strategy (map 1 only) ---###
+# 
+# if (map2 == FALSE) {
+#   
+#   migstrategy <- function(name) {
+#     if (name=="BB" | name=="Chance" | name=="Chris" | name=="David" | name=="Indy" | name=="Iolo" | name=="Kasper" | name=="Livingstone" | name=="Lloyd" | name=="Martin" | name=="Mungo" | name=="Patch" | name=="Roy" | name=="Sussex" | name=="Sussex" | name=="Tor" | name=="Wallace" | name=="Waller") {
+#       strategy <- "SE"
+#     } else {
+#       strategy <- "SW"
+#     }
+#     return(strategy)
+#   }
+#   
+#   mig.strategy <- sapply(longstops$name, migstrategy)
+#   
+# }
 
 
 ###--- convert LOS into binned categorical variable ---###
@@ -410,10 +452,16 @@ groupLOS <- function(LOSvariable){
 #   }
 #   return(bin)
   
+  #for (i in 1:nrow(longstops)) {
+    
+    #LOSvariable <- longstops$LOS[i]
+    
     if (LOSvariable <= 14) {
       bin <- 0.3
     } else if (LOSvariable > 14 & LOSvariable <= 30) {
       bin <- 0.7
+    } else if (is.na(LOSvariable)) {
+      bin <- 0
     } else {
       bin <- 1.1
     }
@@ -421,12 +469,14 @@ groupLOS <- function(LOSvariable){
   
 }
 
-LOS.bin <- sapply(longstops$LOS, groupLOS)
+# if any capture locations have NA for LOS, then set LOS to 0
+longstops$LOS <- ifelse(is.na(longstops$LOS), 0, longstops$LOS)
+LOS.bin <- sapply(na.omit(longstops$LOS), groupLOS)
 
 ###--- FULL DATAFRAME ---###
 
 if (map2 == FALSE) {
-  cuckoo.pts <- data.frame(longstops, LOS.bin, mig.strategy)
+  cuckoo.pts <- data.frame(longstops, LOS.bin)
 }
 
 if (map2 == TRUE) {
@@ -435,7 +485,7 @@ if (map2 == TRUE) {
 
 ###--- convert long/lat to coordinates in WGS84 ---###
 
-coordinates(cuckoo.pts) <- c("long.WGS84","lat.WGS84")
+coordinates(cuckoo.pts) <- c("long","lat")
 proj4string(cuckoo.pts) <- CRS("+proj=longlat +datum=WGS84")
 
 ###--- extract country / continent names ---###
@@ -448,7 +498,7 @@ toplot.pts <- data.frame(cuckoo.pts, geoinfo)
 
 ###--- convert long/lat to coordinates in WGS84 ---###
 
-coordinates(toplot.pts) <- c("long.WGS84","lat.WGS84")
+coordinates(toplot.pts) <- c("long","lat")
 proj4string(toplot.pts) <- CRS("+proj=longlat +datum=WGS84")
 
 ###--- points to remove because dead bird, in sea etc ---###
@@ -475,13 +525,13 @@ if (map2 == FALSE) {
   
 }
 
-if (map2 == TRUE) {
-  which(is.na(toplot.pts$country))
-  
-  toplot.pts[which(is.na(toplot.pts$continent)), "continent"] <- "Europe"
-  toplot.pts[which(is.na(toplot.pts$country)), "country"] <- c("Netherlands")
-  
-}
+# if (map2 == TRUE) {
+#   which(is.na(toplot.pts$country))
+#   
+#   toplot.pts[which(is.na(toplot.pts$continent)), "continent"] <- "Europe"
+#   toplot.pts[which(is.na(toplot.pts$country)), "country"] <- c("Netherlands")
+#   
+# }
   
 
 ###--- remove stopover points in UK that are breeding & > 10d ---###
@@ -489,6 +539,16 @@ if (map2 == TRUE) {
 remove <- which(toplot.pts$country=="United Kingdom")
 toplot.pts <- toplot.pts[-remove,]
 
+if (!map2) {
+  ref <- merge(autumnonly, toplot.pts@data, by=c("name","mgroup","LOS","strat","year"))
+}
+
+if (map2) {
+  ref <- merge(multiyear, toplot.pts@data, by=c("name","mgroup","LOS","strat","year"))
+}
+
+########## EMSWORTHY MAY BE CODED AS INCORRECT STRATEGY, CHECK WITH CHRIS (starts SW, but moves onto SE from Italy, track makes a bend over Tunisia)
+########## WHORTLE CHANGES STRATEGY IN YEAR 2 (2014) - starts as SW bird, moves onto SE
 
 ###-----------------------------------------------------------###
 #         7. PLOT MAPS
@@ -500,8 +560,10 @@ if (map2 == FALSE) {
   
   ###--- create a colour vector for migratory strategy ---###
   
-  colstrategy <- factor(toplot.pts@data$mig.strategy, labels=c("blue","red"))
-  colstrategy.lines <- factor(mig.routes@data$strategy, labels=c("blue", "red"))
+  colstrategy <- factor(toplot.pts@data$strat)
+  colstrategy <- revalue(colstrategy, c("SW"="blue", "SE"="red"))
+  colstrategy.lines <- factor(mig.routes@data$strat)
+  colstrategy.lines <- revalue(colstrategy.lines, c("SW"="blue", "SE"="red"))
   
   setwd(outputwd)
   
@@ -510,13 +572,28 @@ if (map2 == FALSE) {
   par(mar=c(0,0,0,0))
   plot(EurAfrmap, border="grey60")
   
+  
+#   x <- subset(toplot.pts, name=="lloyd")
+#   y <- subset(mig.routes, name=="lloyd")
+#   colstrategy <- factor(x@data$strat)
+#   colstrategy <- revalue(colstrategy, c("SW"="blue", "SE"="red"))
+#   colstrategy.lines <- factor(y@data$strat)
+#   colstrategy.lines <- revalue(colstrategy.lines, c("SW"="blue", "SE"="red"))
+#   
+#   # plot major (> 3 day) stopovers
+#   plot(x, pch=16, col=as.character(colstrategy), cex=toplot.pts$LOS.bin, add=T)
+#   
+#     # plot migration routes
+#   plot(y, col=as.character(colstrategy.lines), lwd=0.6, add=T)
+  
   # plot major (> 3 day) stopovers
   plot(toplot.pts, pch=16, col=as.character(colstrategy), cex=toplot.pts$LOS.bin, add=T)
+  
   
   # plot migration routes
   plot(mig.routes, col=as.character(colstrategy.lines), lwd=0.6, add=T)
   
-  legend(35, 62, legend=c("< 14 days", "14-30 days", "> 30 days", "SW strategy", "SE strategy"), pch=16, cex=0.7, pt.cex=c(0.3, 0.7, 1.1, 0, 0), text.col=c("black","black","black","red","blue"), bty="n")
+  legend(35, 62, legend=c("< 14 days", "14-30 days", "> 30 days", "SE strategy", "SW strategy"), pch=16, cex=0.7, pt.cex=c(0.3, 0.7, 1.1, 0, 0), text.col=c("black","black","black","red","blue"), bty="n")
   
   dev.off()
   
@@ -528,7 +605,8 @@ if (map2 == TRUE) {
   
   ###--- create a colour vector for each individual ---###
   
-  colours <- c("blue", "deeppink", "forestgreen", "cyan3", "darkorchid1")
+  # 2 blacks for 2 Whortle years
+  colours <- c("blue", "deeppink", "forestgreen", "cyan3", "darkorchid1","red","orange","olivedrab3","peachpuff3","black", "black")
   
   colstrategy <- factor(toplot.pts@data$name, labels=colours)
   colstrategy.lines <- factor(mig.routes@data$name, labels=colours)
@@ -546,49 +624,58 @@ if (map2 == TRUE) {
   # plot migration routes
   plot(mig.routes, col=as.character(colstrategy.lines), lwd=0.9, add=T)
   
-  legend(37, 65, legend=c("< 14 days", "14-30 days", "> 30 days", levels(toplot.pts@data$name)), pch=16, cex=0.7, pt.cex=c(0.3, 0.7, 1.1, 0, 0, 0, 0, 0), text.col=c("black", "black", "black", colours), bty="n")
+  #   legend(37, 65, legend=c("< 14 days", "14-30 days", "> 30 days", levels(toplot.pts@data$name)), pch=16, cex=0.7, pt.cex=c(0.3, 0.7, 1.1, 0, 0, 0, 0, 0,0,0,0,0,0), text.col=c("black", "black", "black", colours), bty="n")
   
-  dev.off()
+  legend(37, 60, legend=c("< 14 days", "14-30 days", "> 30 days"), pch=16, cex=0.7, pt.cex=c(0.3, 0.7, 1.1), text.col=c("black", "black", "black"), bty="n")
   
+  
+  legend(-15, 5, legend=c(levels(toplot.pts@data$name)[-which(levels(toplot.pts@data$name)=="Whortle 2")]), pch=16, cex=1, pt.cex=c(0, 0, 0, 0, 0,0,0,0,0,0), text.col=c(colours), bty="n")
+  
+  
+  dev.off()  
 }
 
+# 
+# ############## MAP 2 (version 2, separate maps/bird ########
+# 
+# if (map2 == TRUE) {
+#   
+#   ###--- create a colour vector for each individual ---###
+#   
+#   colours <- c("blue", "deeppink", "forestgreen", "cyan3", "darkorchid1")
+#   
+#   colstrategy <- factor(toplot.pts@data$name, labels=colours)
+#   colstrategy.lines <- factor(mig.routes@data$name, labels=colours)
+#   
+#   setwd(outputwd)
+#   
+#   tiff("multiyear cuckoos southward migration and LOS_v2.tiff",res=300,height=2000,width=2400,units="px")
+#   
+#   lo <- layout(rbind(c(1,2,3),c(4,5,6)))
+#   #layout.show(lo)
+#   par(mar=c(0,0,0,0))
+#   
+#   for (i in 1:length(levels(toplot.pts$name))){
+#     
+#     name <- levels(toplot.pts$name)[i]
+#     
+#     plot(EurAfrmap, border="grey60")
+#     plot(toplot.pts[toplot.pts$name==name,], pch=16, col=colours[i], cex=toplot.pts$LOS.bin, add=T)
+#     
+#     text(-5,-5, name, font=2, cex=1.5)
+#   }
+#   
+#   
+#   legend(80, 30, legend=c("< 14 days", "14-30 days", "> 30 days"), pch=16, cex=1.5, pt.cex=c(0.7, 1.1, 1.5), text.col=c("black", "black", "black"), xpd=NA, bty="n")
+#   
+#   dev.off()
+#   
+#     
+# }
 
-############## MAP 2 (version 2, separate maps/bird ########
 
-if (map2 == TRUE) {
-  
-  ###--- create a colour vector for each individual ---###
-  
-  colours <- c("blue", "deeppink", "forestgreen", "cyan3", "darkorchid1")
-  
-  colstrategy <- factor(toplot.pts@data$name, labels=colours)
-  colstrategy.lines <- factor(mig.routes@data$name, labels=colours)
-  
-  setwd(outputwd)
-  
-  tiff("multiyear cuckoos southward migration and LOS_v2.tiff",res=300,height=2000,width=2400,units="px")
-  
-  lo <- layout(rbind(c(1,2,3),c(4,5,6)))
-  #layout.show(lo)
-  par(mar=c(0,0,0,0))
-  
-  for (i in 1:length(levels(toplot.pts$name))){
-    
-    name <- levels(toplot.pts$name)[i]
-    
-    plot(EurAfrmap, border="grey60")
-    plot(toplot.pts[toplot.pts$name==name,], pch=16, col=colours[i], cex=toplot.pts$LOS.bin, add=T)
-    
-    text(-5,-5, name, font=2, cex=1.5)
-  }
-  
-  
-  legend(80, 30, legend=c("< 14 days", "14-30 days", "> 30 days"), pch=16, cex=1.5, pt.cex=c(0.7, 1.1, 1.5), text.col=c("black", "black", "black"), xpd=NA, bty="n")
-  
-  dev.off()
-  
-    
-}
+
+
 ######################
 # 
 # windows(10,10)

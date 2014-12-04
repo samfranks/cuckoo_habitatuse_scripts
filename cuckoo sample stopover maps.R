@@ -2,10 +2,11 @@
 #
 #	Cuckoo sample stopover maps
 #
-# Sample stopover maps for cuckoo presentation BTO mini research day
+# Sample stopover maps for cuckoo presentations
 #
 #	Samantha Franks
 # 16 April 2014
+# 10 Oct 2014 - more maps for Chris' Korea talk, cuckoo slides
 #
 ##########################################################
 
@@ -51,27 +52,41 @@ library(raster)
 library(rasterVis)
 library(geosphere)
 library(adehabitatHR)
-library(rworldmap) # getMap function
-library(rworldxtra)
+library(GISTools)
 
-###-----------------------------------------------------------###
-#         SET WORKING DIRECTORIES
-###-----------------------------------------------------------###
+#### LOAD WORKSPACE ####
+#load("~/Git/cuckoos/PA corine extraction.RData")
+#load("~/cuckoos/PA corine temp precip extraction.RData") # load workspace on cluster
+load("~/Git/cuckoos/PA epsg3035 corine temp precip extraction.RData") # load workspace on PC
+
+#################################################
+#
+####      SET WORKING DIRECTORIES     ####
+#
+#################################################
 
 parentwd <- c("C:/Users/samf/Documents/Git/cuckoos")
 
 datawd <- paste(parentwd, "/data", sep="")
-outputwd <- paste(parentwd, "/output", sep="")
+outputwd <- paste(parentwd, "/output/sample maps", sep="")
 
-resampwd <- ("/resampled data with uncertainty 100 bootstraps")
-origwd <- ("/original data + distance, movement groups, etc")
+resampwd <- ("/resampled data + extra grouping variables")
+origwd <- ("/original data + extra grouping variables")
 
-origwd.extravar <- ("/original data + extra grouping variables")
-resampwd.extravar<- ("/resampled data + extra grouping variables")
+corinewd <- paste(parentwd, "/data/corine raster 100x100/v17", sep="")
+elevationwd <- paste(parentwd, "/data/elevation data", sep="")
 
-corinewd <- paste(parentwd, "/data/corine raster 100x100", sep="")
+
+# if (!cluster) {
+#   GISwd <- c("C:/Users/samf/Documents/GIS/cuckoos/protected areas")
+# }
+# 
+# if (cluster) {
+#   GISwd <- c("/users1/samf/cuckoos")
+# }
 
 corine.crs <- CRS("+init=epsg:3035")
+epsg4326 <- CRS("+init=epsg:4326")
 
 setwd(parentwd)
 
@@ -80,49 +95,73 @@ setwd(parentwd)
 ###-----------------------------------------------------------###
 
 setwd(corinewd)
-
-corine.crs <- CRS("+init=epsg:3035")
-
-### ------- CORINE land cover raster file ------- ###
 r <- raster("g100_06.tif")
 
-Europebox <- extent(2483500,5890375,1276625,4286750) # bounding box extent for relevant parts of Europe (no Scandanavia or Turkey)
-#Europeraster <- crop(r,Europebox)
+# Protected Area shapefile (PA.epsg3035) already loaded as part of the workspace, with correct projection for corine layer (epsg 3035)
 
-### ------- Europe/Africa national boundaries layer ------- ###
+###=====================================================================###
+#====                  SET-UP DATA & STOPOVER POLYGONS                ====
+###=====================================================================###
 
-dat.world <- getMap(resolution="high")
+### SET SPECIFICATIONS FOR OUTPUT - which bird and which stopover (year and country); some birds may have multiple stops within a country in a given year
+birdname <- "Chance" # name of cuckoo to map
+whichstop <- "2013Germany" # yearcountry
+original <- FALSE
 
-Eur.Afr <- dat.world[which(dat.world$REGION=="Europe" | dat.world$REGION=="Africa"),]
-Eur.Afr <- Eur.Afr[which(Eur.Afr$ADMIN!="Russia" & Eur.Afr$ADMIN!= "Azerbaijan" & Eur.Afr$ADMIN!="Gaza" & Eur.Afr$ADMIN!="Georgia" & Eur.Afr$ADMIN!="Israel" & Eur.Afr$ADMIN!="West Bank" & Eur.Afr$ADMIN!="Armenia"),]
-Eur.Afr <- Eur.Afr[which(is.na(Eur.Afr$TERR_)),]
+whichyear <- as.numeric(substring(whichstop,1,4))  # 4 character year
+whichcountry <- substring(whichstop, 5) # country name
 
-Eur.Afr <- spTransform(Eur.Afr,CRS("+init=epsg:4326")) # transform map to exactly the same projection as cuckoo newlongs/newlats data
+###------------------ LOAD DATA, SUBSET, ADD PROJECTION INFO, TRANSFORM ------------------
 
-Eur.only <- Eur.Afr[which(Eur.Afr$REGION=="Europe"),]
-Afr.only <- Eur.Afr[which(Eur.Afr$REGION=="Africa"),]
+if (original) setwd(paste(datawd,origwd,sep=""))
+if (!original) setwd(paste(datawd,resampwd,sep=""))
+
+dataset <- read.csv(paste(birdname, ".csv", sep=""), header=T)
+
+# convert mgroup to factor
+dataset$mgroup <- as.factor(dataset$mgroup)
+
+dataset2 <- data.frame(dataset)
+
+# subset dataset by stopover sites (no breeding sites)
+dataset3 <- subset(dataset2, stopoversite=="Y")
+dataset3 <- droplevels(dataset3)
+
+# long/lat (original) are in CRS("+init=epsg:4326")
+# long/lat (resampled) are in CRS("+init=epsg:3395")  
+# newlongs/newlats (resampled) are in CRS("+init=epsg:4326")
+# Transform cuckoo coordinates to same CRS used for Corine layers using spTransform() in library(rgdal)
+
+
+# ---------------------- RESAMPLED DATA -----------------------#
+if (!original) {
+  coordinates(dataset) <- c("newlongs","newlats")
+  proj4string(dataset) <- CRS("+init=epsg:4326") 
+  dataset.epsg3035 <- spTransform(dataset, CRS=corine.crs) 
+}
+
+# ---------------------- ORIGINAL DATA -----------------------#
+if (original) {
+  coordinates(dataset) <- c("long","lat")
+  proj4string(dataset) <- CRS("+init=epsg:4326")
+  dataset.epsg3035 <- spTransform(dataset, CRS=corine.crs)
+  
+}
+
+#### ================= CREATE SUBSET OF DESIRED DATA FOR BIRD BY YEAR and COUNTRY =============== ####
+newdat <- dataset.epsg3035[which(dataset.epsg3035$year==whichyear & dataset.epsg3035$country==whichcountry),]
+
+# convert mgroup to factor
+newdat@data$mgroup <- as.factor(newdat@data$mgroup)
+newdat@data <- droplevels(newdat@data)
+
+if (original) plotorig <- newdat
+if (!original) plotresamp <- newdat
+
 
 ###------------------------------------------------------------###
 #   CREATE DATASETS FOR ANALYSIS (include extra grouping variables) USING SOURCE CODE
 ###------------------------------------------------------------###
-
-# create list to hold centroids of stopover points for all cuckoos
-centroid.stopovers <- list()
-
-a <- 2
-
-setwd(paste(datawd,origwd.extravar,sep=""))
-originaldata <- read.csv(list.files()[a], header=TRUE)
-coordinates(originaldata) <- c("long","lat")
-proj4string(originaldata) <- CRS("+init=epsg:4326")
-newdat.orig <- spTransform(originaldata, CRS=corine.crs)
-
-
-setwd(paste(datawd,resampwd.extravar,sep=""))
-resampleddata <- read.csv(list.files()[a], header=TRUE)
-coordinates(resampleddata) <- c("newlongs","newlats")
-proj4string(resampleddata) <- CRS("+init=epsg:4326")
-newdat <- spTransform(resampleddata, CRS=corine.crs)
 
 
   
@@ -132,9 +171,43 @@ newdat <- spTransform(resampleddata, CRS=corine.crs)
   
 # create new directory for specific bird to put output maps in, and setwd() as this new directory
 
-mapoutputdir <- paste("C:/Users/samf/Documents/Git/cuckoos/output/sample maps", sep="")
+gClip <- function(toclip, clipwith){
+  clipwith <- extent(newdat)
+  clipby <- as(extent(clipwith), "SpatialPolygons")
+  gIntersection(toclip, clipby, byid = T)
+}
 
-setwd(mapoutputdir)
+setwd(outputwd)
+
+mlarge <- 70000
+msmall <- 20000
+
+croppedraster.large <- crop(r,extent(plotresamp) + mlarge) # crop raster to +/- 10000m (10km) to each of N/S, E/W of stopover extent
+croppedraster.small <- crop(r,extent(plotresamp) + msmall) # crop raster to +/- 10000m (10km) to each of N/S, E/W of stopover extent
+
+croppedPA <- PA.epsg3035[plotresamp,]
+
+tiff("sample map large scale.tiff", res=150,height=800,width=800,units="px")
+### plot the large scale map showing entire PA coverage in area
+plot(croppedraster.large)
+plot(croppedPA, add=T, lwd=1.2, col=rgb(1,130,185,150,max=255))
+#plot(croppedPA, lwd=1.2, col=rgb(1,130,185,150,max=255))
+plot(plotresamp, cex=0.5, pch=16, col="black", add=T)
+plot(plotorig, cex=0.5, pch=16, col="purple4", add=T)
+# extentlarge.vector <- as.vector(extent(croppedraster.large))
+# map.scale(extentlarge.vector[1]+10000, extentlarge.vector[3]+10000, 20000, "km", 5, sfcol="black")
+dev.off()
+
+PA.clipped <- gClip(croppedPA, extent(newdat)+msmall)
+
+tiff("sample map small scale.tiff", res=150,height=800,width=800,units="px")
+### plot the small scale map
+plot(croppedraster.small)
+plot(PA.clipped, add=T, lwd=1.2, col=rgb(1,130,185,150,max=255))
+#plot(croppedPA, lwd=1.2, col=rgb(1,130,185,150,max=255))
+plot(plotresamp, cex=1, pch=16, col="black", add=T)
+plot(plotorig, cex=1, pch=16, col="purple4", add=T)
+dev.off()
 
 ###-------------------------------------------------------###
 #     EUROPE MAP, ALL STOPOVERS 

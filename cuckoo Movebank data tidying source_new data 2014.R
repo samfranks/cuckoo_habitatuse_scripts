@@ -11,6 +11,12 @@
 #
 ##########################################################
 
+
+######### NOTES ##########
+
+# code requires a data file object called d, which is a .csv file downloaded straight from Movebank
+# outputs an object called fulloriginal
+
 library(rgdal)
 library(maptools)
 library(shape)
@@ -31,33 +37,39 @@ library(plyr)
 
 # cuckoo coordinate locations are in Lat-Long and UTM coordinates and WGS84 datum
 
-setwd("C:/Users/samf/Documents/Git/cuckoos/data")
+# setwd("C:/Users/samf/Documents/Git/cuckoos/data")
 
 ##############  USES ARGOS MOVEBANK PRE-FILTERED DATA
-d <- read.csv("BTO Cuckoo migration study_20140902.csv", header=T)
+# d <- read.csv("BTO Cuckoo migration study_Movebank_20141128.csv.csv", header=T)
 
 d2 <- with(d, data.frame(name=individual.local.identifier, id=event.id, timestamp, long=location.long, lat=location.lat, loc.class=argos.lc, error.major=argos.semi.major, error.minor=argos.semi.minor))
 
 d2$long <- as.numeric(as.character(d2$long))
 
-d2$name <- revalue(d2$name, c("lloyd"="Lloyd", "Rob Roy"="Roy", "Jake"="Patch"))
-
+# d2$name <- revalue(d2$name, c("lloyd"="Lloyd", "Rob Roy"="Roy", "Jake"="Patch"))
 
 x <- do.call(rbind,(strsplit(as.character(d2$timestamp), " ")))
 
-dat.datetime <- chron(x[,1], x[,2], format=c(dates="d/m/y", times="h:m:s"))
+dat.datetime <- chron(x[,1], x[,2], format=c(dates="y-m-d", times="h:m:s"))
 
-d2 <- data.frame(d2, datetime=dat.datetime, year=years(dat.datetime), month=as.numeric(months(dat.datetime)), day=days(dat.datetime))
+d2 <- data.frame(d2, datetime=dat.datetime, year=as.numeric(as.character(years(dat.datetime))), month=as.numeric(months(dat.datetime)), day=as.numeric(days(dat.datetime)))
 
 d2 <- d2[order(d2$name, d2$datetime),]
 
 # removes locations outside Afro-Palearctic (reference points in North America plus any really weird points in the Atlantic)
 d3 <- subset(d2, long > -30)
 
-d4 <- subset(d3, loc.class=="1" | loc.class=="2" | loc.class=="3") # subset by best location classes
+# d4 <- subset(d3, loc.class=="1" | loc.class=="2" | loc.class=="3") # subset by best location classes
 
-d5 <- subset(d4, name!="New Forest 1")
+if (length(rm.names) > 0) {
+  d5 <- d3[-grep(paste(rm.names, collapse="|"), d3$name),]
+} else {
+  d5 <- d3
+}
 d5 <- droplevels(d5)
+
+# remove first Waller point which is given as in the North Sea
+d5 <- d5[-which(d5$name=="Waller" & d5$id==192215226),]
 
 ###-----------------------------------------------###
 #         Add distance, bearing, mgroup and mtype to original data
@@ -133,13 +145,13 @@ original <- lapply(newdat, trimdata) # apply function to calculate distance, bea
 
 fulloriginal <- do.call(rbind,original)
 
-setwd("C:/Users/samf/Documents/Git/cuckoos/data")
-write.csv(fulloriginal, "allbirdfinal - Movebank original data new birds 20140903.csv", row.names=F)
-
-setwd("C:/Users/samf/Documents/Git/cuckoos/data/Movebank original data new birds + distance, movement groups, etc")
-for (i in 1:length(original)){
-  write.csv(original[[i]], paste(original[[i]]$name[1],".csv", sep=""), row.names=FALSE)
-}
+# setwd("C:/Users/samf/Documents/Git/cuckoos/data")
+# write.csv(fulloriginal, "allbirdfinal - Movebank original data new birds 20140903.csv", row.names=F)
+# 
+# setwd("C:/Users/samf/Documents/Git/cuckoos/data/Movebank original data new birds + distance, movement groups, etc")
+# for (i in 1:length(original)){
+#   write.csv(original[[i]], paste(original[[i]]$name[1],".csv", sep=""), row.names=FALSE)
+# }
 
 # # ### Histogram of cuckoo distance movements
 # # 
